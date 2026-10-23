@@ -194,7 +194,7 @@ Un prix n’est pas une formule : écrivez \$12 pour afficher un dollar littéra
     local.running=false;updateStorageUI();
   }
   function validReadHandle(handle) {return !!handle&&handle.kind==='file'&&typeof handle.getFile==='function'&&typeof handle.queryPermission==='function'&&typeof handle.requestPermission==='function';}
-  function restoreSnapshot(snapshot) {
+  async function restoreSnapshot(snapshot) {
     const invalid=()=>{throw new Error('Copie locale invalide.');};
     if(!snapshot||snapshot.schema!==1||!Array.isArray(snapshot.docs)||!Array.isArray(snapshot.assets)||snapshot.docs.length>MAX_COUNT||snapshot.assets.length>MAX_ASSETS)invalid();
     const docs=[],assets=new Map(),paths=new Set();let total=0,nodes=0;
@@ -202,7 +202,7 @@ Un prix n’est pas une formule : écrivez \$12 pour afficher un dollar littéra
       if(!item||typeof item.path!=='string'||!item.path||item.path.length>MAX_PATH||typeof item.content!=='string'||item.content.includes('\0'))invalid();
       const path=normalizePath(item.path);if(!path||paths.has(path)||!MD_PATTERN.test(path))invalid();paths.add(path);
       const size=new TextEncoder().encode(item.content).length;if(size>MAX_DOC||(total+=size)>MAX_TOTAL)invalid();
-      const rendered=FolioRenderer.render(item.content),watch=newWatch();
+      const rendered=await FolioRenderer.renderAsync(item.content),watch=newWatch();
       if((nodes+=rendered.nodeCount)>MAX_RENDER_NODES)invalid();
       if(item.watch?.enabled===true){watch.enabled=true;watch.handle=validReadHandle(item.watch.handle)?item.watch.handle:null;watch.status='paused';watch.message=watch.handle?'Vérification de l’accès au fichier…':'Choisissez le fichier original pour reprendre le suivi.';}
       docs.push({id:'d'+state.next++,path,content:item.content,size,rendered,scroll:0,sourceScroll:0,search:normalizeSearch(path+'\n'+rendered.title+'\n'+item.content),watch});
@@ -223,7 +223,7 @@ Un prix n’est pas une formule : écrivez \$12 pour afficher un dollar littéra
     try {
       const saved=await FolioStorage.read();local.revision=saved.revision;local.requested=saved.enabled;local.committed=saved.enabled;
       if(saved.enabled){
-        try{restoreSnapshot(saved.snapshot);local.savedCount=state.docs.length;}
+        try{await restoreSnapshot(saved.snapshot);local.savedCount=state.docs.length;}
         catch(error){local.error=error;local.blocked='invalid';}
       }
     }catch(error){local.error=error;local.blocked=error.code==='invalid'?'corrupt':'unavailable';}
@@ -263,7 +263,8 @@ Un prix n’est pas une formule : écrivez \$12 pour afficher un dollar littéra
     if(content.includes('\0'))throw new Error('Ce fichier ne semble pas être du texte Markdown. La dernière version lisible reste affichée.');
     if(totalBytes()-doc.size+file.size>MAX_TOTAL)throw new Error('La collection dépasse la limite de 80 Mio.');
     if(content===doc.content)return true;
-    const rendered=FolioRenderer.render(content);if(!current())return false;
+    const rendered=await FolioRenderer.renderAsync(content);if(!current()||state.busy)return false;
+    if(totalBytes()-doc.size+file.size>MAX_TOTAL)throw new Error('La collection dépasse la limite de 80 Mio.');
     checkRenderBudget(rendered,doc);
     doc.content=content;doc.size=file.size;doc.rendered=rendered;doc.search=normalizeSearch(doc.path+'\n'+rendered.title+'\n'+content);watch.updatedAt=Date.now();
     if(state.active===doc.id)setActive(doc.id,{closeSidebar:false,preserveSource:true,keepMenus:true,skipPersist:true});else updateFileList();
@@ -404,6 +405,9 @@ Un prix n’est pas une formule : écrivez \$12 pour afficher un dollar littéra
   }
   function hydrateImages(root,doc) {
     for(const img of root.querySelectorAll('img')) {
+      // Only the local diagram module creates this class after sanitisation.
+      // Its SVG data image is already complete and is not an imported asset.
+      if(img.classList.contains('mermaid-diagram'))continue;
       const src=img.getAttribute('data-folio-src')||'';img.removeAttribute('data-folio-src');
       if(/^data:image\/(?:png|jpeg|gif|webp|avif);base64,/i.test(src)) {img.src=src;continue;}
       if(isExternal(src)||isScheme(src)) {imagePlaceholder(img,'Image distante bloquée · importez une copie locale pour l’afficher.');continue;}
@@ -492,8 +496,8 @@ Un prix n’est pas une formule : écrivez \$12 pour afficher un dollar littéra
     const total=state.docs.reduce((count,doc)=>count+(doc===prior?0:doc.rendered.nodeCount),0)+rendered.nodeCount;
     if(total>MAX_RENDER_NODES)throw new Error('La collection contient trop d’éléments de mise en page. Retirez quelques documents avant cet ajout.');
   }
-  function addDocument(path,content,size) {
-    const prior=state.docs.find(doc=>doc.path===path), rendered=FolioRenderer.render(content);
+  async function addDocument(path,content,size) {
+    const prior=state.docs.find(doc=>doc.path===path), rendered=await FolioRenderer.renderAsync(content);
     checkRenderBudget(rendered,prior);
     if(prior)FolioWatcher.unwatch(prior.id);
     // A File imported under the same name does not prove the same disk identity.
@@ -525,7 +529,7 @@ Un prix n’est pas une formule : écrivez \$12 pour afficher un dollar littéra
             const bytes=await file.arrayBuffer();let content;
             try{content=new TextDecoder('utf-8',{fatal:true}).decode(bytes).replace(/^\uFEFF/,'').replace(/\r\n?/g,'\n');}catch(_){throw new Error('enregistrez ce fichier en UTF-8.');}
             if(content.includes('\0'))throw new Error('ce fichier ne semble pas être du texte Markdown.');
-            const result=addDocument(path,content,file.size);if(!first)first=result.doc.id;result.updated?updated++:added++;if(result.watchStopped)watchStopped++;
+            const result=await addDocument(path,content,file.size);if(!first)first=result.doc.id;result.updated?updated++:added++;if(result.watchStopped)watchStopped++;
           } else {const data=await readDataURL(file,mime);state.assets.set(path,{path,data,size:file.size});images++;}
         }catch(error){errors.push(baseName(path)+' : '+(error.message||'lecture impossible.'));}
         if((added+updated+images)%5===0)await new Promise(resolve=>requestAnimationFrame(resolve));
@@ -704,14 +708,14 @@ Un prix n’est pas une formule : écrivez \$12 pour afficher un dollar littéra
     const tablist=multi?'<nav class="export-tabs" role="tablist" aria-label="Documents">'+docs.map((doc,index)=>'<button id="export-tab-'+index+'" class="export-tab" role="tab" data-panel="folio-page-'+index+'" aria-controls="folio-page-'+index+'" aria-selected="'+(index===0)+'" tabindex="'+(index===0?0:-1)+'">'+escapeHTML(baseName(doc.path))+'</button>').join('')+'</nav>':'';
     const script=multi?'<scr'+'ipt>('+exportRuntime.toString()+')();</scr'+'ipt>':'';
     const csp="default-src 'none'; script-src "+(multi?"'unsafe-inline'":"'none'")+"; style-src 'unsafe-inline'; img-src data:; font-src data:; connect-src 'none'; object-src 'none'; base-uri 'none'; form-action 'none'; frame-src 'none'";
-    return '<!doctype html>\n<html lang="fr" data-theme="light"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="referrer" content="no-referrer"><meta http-equiv="Content-Security-Policy" content="'+csp+'"><title>'+escapeHTML(title)+'</title><link rel="icon" href="'+document.querySelector('link[rel="icon"]').getAttribute('href')+'">'+styles+'</head><body class="export-body"><header class="export-header"><div class="brand"><span class="brand-mark">'+icon('brand')+'</span><span class="wordmark">folio</span></div><div class="export-label">'+(multi?docs.length+' documents':'Document HTML')+'<br>Copie autonome · lecture hors connexion</div></header><main class="export-shell">'+tablist+sections+'<footer class="export-footer">Créé avec Folio · Les formules, la mise en page et les images locales sont intégrées.</footer></main>'+script+'</body></html>';
+    return '<!doctype html>\n<html lang="fr" data-theme="light"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="referrer" content="no-referrer"><meta http-equiv="Content-Security-Policy" content="'+csp+'"><title>'+escapeHTML(title)+'</title><link rel="icon" href="'+document.querySelector('link[rel="icon"]').getAttribute('href')+'">'+styles+'</head><body class="export-body"><header class="export-header"><div class="brand"><span class="brand-mark">'+icon('brand')+'</span><span class="wordmark">folio</span></div><div class="export-label">'+(multi?docs.length+' documents':'Document HTML')+'<br>Copie autonome · lecture hors connexion</div></header><main class="export-shell">'+tablist+sections+'<footer class="export-footer">Créé avec Folio · Les formules, les diagrammes, la mise en page et les images locales sont intégrés.</footer></main>'+script+'</body></html>';
   }
   function download(blob,filename) {const url=URL.createObjectURL(blob),link=document.createElement('a');link.href=url;link.download=filename;document.body.append(link);link.click();link.remove();setTimeout(()=>URL.revokeObjectURL(url),60000);}
   async function exportHTML(all) {
     const focusFromMenu=$('export-menu').contains(document.activeElement);
     closeExport();const doc=activeDoc();if(!doc)return;
     const button=$('export-toggle');button.disabled=true;
-    try {await new Promise(resolve=>requestAnimationFrame(resolve));const docs=all?[...state.docs]:[doc],paths=exportPaths();const html=makeExport(docs,paths);download(new Blob([html],{type:'text/html;charset=utf-8'}),all&&docs.length>1?'Folio-collection.html':baseName(paths.get(doc.id)));notify(all&&docs.length>1?'Collection exportée avec ses onglets, ses formules et ses images locales.':'Page HTML exportée. Elle peut être ouverte hors connexion.');}
+    try {await new Promise(resolve=>requestAnimationFrame(resolve));const docs=all?[...state.docs]:[doc],paths=exportPaths();const html=makeExport(docs,paths);download(new Blob([html],{type:'text/html;charset=utf-8'}),all&&docs.length>1?'Folio-collection.html':baseName(paths.get(doc.id)));notify(all&&docs.length>1?'Collection exportée avec ses onglets, ses formules, ses diagrammes et ses images locales.':'Page HTML exportée. Elle peut être ouverte hors connexion.');}
     catch(error){notify('L’export n’a pas abouti : '+(error.message||'erreur inattendue.'),true);}
     finally{button.disabled=state.busy;if(focusFromMenu&&!button.disabled&&state.active)focusCollectionControl(button);}
   }

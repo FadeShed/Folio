@@ -53,7 +53,17 @@
 .prose .katex-display { overflow-x:auto; overflow-y:hidden; padding:10px 4px 14px; margin:22px 0; }
 .prose .folio-math-block { max-width:100%; overflow-x:auto; margin:24px 0; }
 .prose .folio-math-error { display:inline-block; padding:8px 12px; border:1px solid #d3a682; border-radius:5px; background:#fff3e5; color:#713b1c; font:13px/1.6 monospace; white-space:pre-wrap; }
+.mermaid-render-stage { position:fixed; left:-100000px; top:0; width:1000px; visibility:hidden; pointer-events:none; font:16px/1.5 Arial,sans-serif; color:#172b24; background:#fff; }
+.prose .folio-mermaid { margin:26px 0; border:1px solid var(--line,#e6e8e2); border-radius:9px; overflow:hidden; }
+.prose .mermaid-viewport { padding:24px 18px; overflow:auto; background:#fff; color-scheme:light; }
+.prose .mermaid-diagram { display:block; width:auto; max-width:100%; height:auto; margin:0 auto; border-radius:0; }
+.prose .mermaid-source { border:0; border-top:1px solid var(--line,#e6e8e2); border-radius:0; margin:0; padding:12px 18px; background:var(--panel,#f5f6f0); font:13px/1.6 system-ui,sans-serif; }
+.prose .mermaid-source .code-wrap { margin:12px 0 0; }
+.prose .mermaid-source pre { margin:12px 0 0; }
+.prose .mermaid-source .code-wrap pre { margin:0; }
+.prose .mermaid-error { margin:0; padding:16px 18px; background:#fff3e5; color:#713b1c; font:13px/1.6 system-ui,sans-serif; white-space:pre-wrap; overflow-wrap:anywhere; }
 .prose del { color:var(--muted,#69756c); }
 .prose abbr { text-underline-offset:3px; }
 @media(max-width:700px) { .prose {font-size:17px;line-height:1.75} .prose h1 {font-size:32px;letter-spacing:-.8px} .prose h2 {font-size:25px} .prose h3 {font-size:21px} .prose pre {padding:18px} .prose blockquote {padding:16px 18px} }
 @media print { .prose {font-size:11pt;color:#111;line-height:1.6} .prose h1 {font-size:26pt} .prose h2 {font-size:19pt} .prose h3 {font-size:15pt} .prose h1,.prose h2,.prose h3 {break-after:avoid} .prose pre,.prose blockquote,.prose table,.prose img {break-inside:avoid} .prose pre {white-space:pre-wrap;overflow-wrap:anywhere;background:#f1f3ee;color:#172b24;border:1px solid #ddd} .prose .code-bar {background:#f1f3ee;color:#33473b} .prose .copy-code {display:none} .prose a {color:#111} .prose .table-wrap {overflow:visible} .prose .katex-display {overflow:visible} }
+@media print { .prose .folio-mermaid {break-inside:avoid} .prose .mermaid-viewport {overflow:visible;padding:12px} .prose .mermaid-viewport + .mermaid-source {display:none} .mermaid-render-stage {display:none} }

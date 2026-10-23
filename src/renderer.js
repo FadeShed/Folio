@@ -480,12 +480,22 @@
     while (words.exec(text)) wordCount++;
     const title = headings.find(h => h.level === 1)?.text || headings[0]?.text || '';
     const budget = measureTree(fragment, true);
-    return {fragment, headings, title, wordCount, anchorMap, mathWarnings, mathCount:mathTokens.size, ...budget};
+    return {fragment, headings, title, wordCount, anchorMap, mathWarnings, mathCount:mathTokens.size, diagramWarnings:[], diagramCount:0, ...budget};
+  }
+  async function renderAsync(markdown) {
+    const result = render(markdown);
+    if (result.fragment.querySelector('pre > code.language-mermaid')) {
+      Object.assign(result, await FolioDiagrams.render(result.fragment, unsupportedMathCommand));
+      // Embedded SVG data counts towards the same document/collection/export
+      // budgets as the rest of the rendered content.
+      Object.assign(result, measureTree(result.fragment, true));
+    }
+    return result;
   }
   function resolveAnchor(result, rawAnchor) {
     let anchor = String(rawAnchor || '').replace(/^#/, '');
     try { anchor = decodeURIComponent(anchor); } catch (_) {}
     return result.anchorMap[anchor] || result.anchorMap[slug(anchor, false)] || result.anchorMap[slug(anchor, true)] || null;
   }
-  window.FolioRenderer = Object.freeze({render, resolveAnchor, safeUrl, slug, limits, versions: {marked:'18.1.1', dompurify:'3.4.17'}});
+  window.FolioRenderer = Object.freeze({render, renderAsync, resolveAnchor, safeUrl, slug, limits, versions: {marked:'18.1.1', dompurify:'3.4.17', mermaid:'12.2.0'}});
 })();

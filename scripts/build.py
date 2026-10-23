@@ -12,6 +12,8 @@ SOURCES = {
     "MATH_CSS": "vendor/math.css",
     "VENDOR_JS": "vendor/vendor.js",
     "MATH_JS": "vendor/math-vendor.js",
+    "MERMAID_JS": "vendor/mermaid-vendor.js",
+    "DIAGRAMS_JS": "src/diagrams.js",
     "RENDERER_JS": "src/renderer.js",
     "STORAGE_JS": "src/storage.js",
     "WATCHER_JS": "src/watcher.js",
