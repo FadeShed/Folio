@@ -161,7 +161,7 @@ await check('Liens : chemins relatifs, titres répétés, ancres et ambiguïté'
 await check('Recherche : accents, caractères littéraux et aucune injection',()=>{
  const search=ctx.doc.getElementById('search');search.value='deja vu';search.dispatchEvent(new ctx.win.Event('input',{bubbles:true}));assert.equal(ctx.doc.querySelectorAll('#file-list .file-button').length,1);
  search.value='<script>';search.dispatchEvent(new ctx.win.Event('input',{bubbles:true}));assert.equal(ctx.doc.querySelectorAll('#file-list .file-button').length,1);assert.equal(ctx.doc.querySelectorAll('#file-list script').length,0);
- search.value='a+b[1]';search.dispatchEvent(new ctx.win.Event('input',{bubbles:true}));assert.equal(ctx.doc.querySelectorAll('#file-list .file-button').length,0);search.value='';search.dispatchEvent(new ctx.win.Event('input',{bubbles:true}));
+ search.value='a+b[1]';search.dispatchEvent(new ctx.win.Event('input',{bubbles:true}));assert.equal(ctx.doc.querySelectorAll('#file-list .file-button').length,1);const activeCard=ctx.doc.querySelector('#file-list .file-item.active.outside-search');assert(activeCard);assert.equal(activeCard.querySelector('.file-button').dataset.docId,activeTab(ctx).dataset.docId);assert.match(activeCard.textContent,/En lecture\s*·\s*hors résultats/);search.value='';search.dispatchEvent(new ctx.win.Event('input',{bubbles:true}));
 });
 let standaloneHTML='',collectionHTML='';
 await check('Export individuel : téléchargement capturé et HTML autonome reparsable',async()=>{

@@ -1,9 +1,9 @@
 {
-  "generatedAt": "2026-10-23T13:01:11+00:00",
+  "generatedAt": "2026-10-23T13:55:25+00:00",
   "artifact": {
     "path": "Folio.html",
-    "bytes": 903846,
-    "sha256": "bf2b5706026b947113dd56dd34198d9faa00268603a65143469e2e37ddafdaa4"
+    "bytes": 914379,
+    "sha256": "d5a5a9b30e03e05876860056dea6e9c54164a19f030d8e7d00e1f145a71981ad"
   },
   "environment": {
     "node": "24.19.0",
@@ -12,9 +12,9 @@
   },
   "buildMatchesSources": true,
   "nativeBrowserVerificationPerformed": false,
-  "validationScope": "Code review, simulated DOM/IndexedDB/file handles, dependency provenance and advisories; see AUDIT.md for native browser limitations.",
-  "passed": 72,
-  "total": 72,
+  "validationScope": "Code review, simulated DOM/IndexedDB/file handles and paste events, dependency provenance and advisories; see AUDIT.md for native browser limitations.",
+  "passed": 84,
+  "total": 84,
   "suites": [
     {
       "name": "Lecteur, sécurité et exports",
@@ -319,8 +319,8 @@
     {
       "name": "Régressions fonctionnelles et accessibilité",
       "script": "tests/test-functional-regressions.cjs",
-      "passed": 9,
-      "total": 9,
+      "passed": 11,
+      "total": 11,
       "tests": [
         {
           "name": "Exports individuels : noms uniques et liens cohérents pour extensions Markdown concurrentes",
@@ -331,7 +331,15 @@
           "status": "PASS"
         },
         {
-          "name": "Outils latéraux : un panneau au-dessus du sommaire devient un menu accessible dans les onglets",
+          "name": "Cartouche actif : commandes uniques, recherche et métadonnées accessibles selon la largeur",
+          "status": "PASS"
+        },
+        {
+          "name": "Corbeilles de collection : sélection, focus mobile et retraits mémorisés restent cohérents",
+          "status": "PASS"
+        },
+        {
+          "name": "Corbeille pendant une lecture suivie : arrêt du suivi sans réapparition du document",
           "status": "PASS"
         },
         {
@@ -356,6 +364,54 @@
         },
         {
           "name": "Contraste : petits textes secondaires et extensions atteignent 4,5:1 dans les deux thèmes",
+          "status": "PASS"
+        }
+      ]
+    },
+    {
+      "name": "Collage de Markdown",
+      "script": "tests/test-paste-regressions.cjs",
+      "passed": 10,
+      "total": 10,
+      "tests": [
+        {
+          "name": "Collage global : source normalisée, nouveau document actif et noms datés sans écrasement",
+          "status": "PASS"
+        },
+        {
+          "name": "Collage global : champs éditables, dialogue ouvert et événement déjà traité restent libres",
+          "status": "PASS"
+        },
+        {
+          "name": "Formats du presse-papiers : fichiers et HTML seuls ignorés, texte brut prioritaire",
+          "status": "PASS"
+        },
+        {
+          "name": "Rendu du texte collé : assainissement, images distantes bloquées et mathématiques locales",
+          "status": "PASS"
+        },
+        {
+          "name": "Dialogue : collage natif dans le brouillon, création explicite et annulation sans ajout",
+          "status": "PASS"
+        },
+        {
+          "name": "Raccourcis du dialogue : Ctrl Entrée et Commande Entrée créent chacun un seul document",
+          "status": "PASS"
+        },
+        {
+          "name": "Erreurs de collage : brouillon conservé, limite UTF-8 et limite de rendu puis reprise",
+          "status": "PASS"
+        },
+        {
+          "name": "Import en cours : collage capturé sans ajout différé ni création concurrente",
+          "status": "PASS"
+        },
+        {
+          "name": "Collection pleine : le collage respecte les 200 documents sans changer la sélection ni la recherche",
+          "status": "PASS"
+        },
+        {
+          "name": "Mémorisation : aucun enregistrement sans opt-in, copies collées restaurées sans suivi implicite",
           "status": "PASS"
         }
       ]

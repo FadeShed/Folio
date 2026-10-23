@@ -6,11 +6,13 @@ Cet audit a été réalisé avant le premier envoi du code de Folio dans ce dép
 
 La revue couvre les fichiers propres à Folio dans `src/`, le script d’assemblage et le lanceur de tests. Pour Marked, DOMPurify et KaTeX, elle vérifie les versions, les avis de sécurité, les paramètres utilisés par Folio, la provenance et l’intégrité des distributions. Elle ne prétend pas constituer une revue ligne par ligne de tout le code interne de ces trois projets.
 
-Les modifications d’interface demandées pendant l’audit suppriment le bandeau inférieur du lecteur, qui répétait le nom du fichier et la mention de lecture locale, et déplacent les métadonnées de lecture avec les commandes du document dans la colonne de droite, au-dessus du sommaire. La zone de lecture commence directement sous les onglets. Sur petit écran, un bouton compact dans la rangée des onglets donne accès aux outils. La marque reste dans la colonne de collection ; aucun bandeau supérieur redondant n’est réintroduit.
+Les modifications d’interface suppriment le bandeau inférieur du lecteur, qui répétait le nom du fichier et la mention de lecture locale. Les métadonnées de lecture occupent la colonne de droite, au-dessus du sommaire ; les commandes sont regroupées dans la cartouche du document actif, à gauche, avec une corbeille pour chaque document. Sur écran étroit, les métadonnées rejoignent cette cartouche et le bouton de collection donne accès aux commandes sur mobile. La zone de lecture commence directement sous les onglets. La marque reste dans la colonne de collection ; aucun bandeau supérieur redondant n’est réintroduit.
+
+Une évolution complémentaire ajoute la création de documents datés par collage. Le périmètre de validation comprend désormais les événements de collage, la zone de préparation, les collisions de noms, les limites communes à l’import et la suppression depuis les cartouches.
 
 ## Résultat de la validation
 
-**72/72 scénarios réussis sur le HTML final.** La vérification `python3 scripts/build.py --check` confirme que le fichier distribué correspond exactement aux sources.
+**84/84 scénarios réussis sur le HTML final.** La vérification `python3 scripts/build.py --check` confirme que le fichier distribué correspond exactement aux sources.
 
 | Suite | Résultat |
 | --- | ---: |
@@ -20,12 +22,13 @@ Les modifications d’interface demandées pendant l’audit suppriment le bande
 | Interface du suivi | 7/7 |
 | Régressions de rendu et sécurité | 15/15 |
 | Régressions de stockage | 5/5 |
-| Régressions fonctionnelles et accessibilité | 9/9 |
+| Régressions fonctionnelles et accessibilité | 11/11 |
+| Collage de Markdown | 10/10 |
 
-`Folio.html` : **903 846 octets**. Empreinte SHA-256 :
+`Folio.html` : **914 379 octets**. Empreinte SHA-256 :
 
 ```text
-bf2b5706026b947113dd56dd34198d9faa00268603a65143469e2e37ddafdaa4
+d5a5a9b30e03e05876860056dea6e9c54164a19f030d8e7d00e1f145a71981ad
 ```
 
 Le [relevé de validation](docs/audit-results.json) conserve les noms et résultats des scénarios, l’empreinte du livrable et les contrôles d’intégrité des bibliothèques.
@@ -58,6 +61,14 @@ Les priorités décrivent l’impact observé dans Folio : P1 pour une atteinte 
 Les contrôles de limites sont effectués avant de remplacer une version valide importée ou suivie. Une erreur de lecture, d’encodage ou de rendu ne doit pas écraser silencieusement le document déjà affiché.
 
 ## Sécurité et confidentialité vérifiées
+
+### Collage et cartouches de documents
+
+Le collage direct lit seulement `text/plain` dans l’événement `paste`, avant toute attente asynchrone. Il n’appelle pas `navigator.clipboard.readText()` et n’utilise pas le HTML du presse-papiers. Les champs de saisie, les contextes éditables, les dialogues ouverts, les événements déjà annulés et les presse-papiers contenant des fichiers sont exclus de cette interception. Un texte simple est accepté comme paragraphe Markdown.
+
+Le texte est importé par le même chemin qu’un fichier Markdown : limites de taille et de collection, validation du texte, nettoyage, rendu mathématique, budgets de rendu et persistance facultative. Un nom daté libre est choisi avant l’import ; une collision ajoute un suffixe au lieu de remplacer un document existant. Un collage ne crée aucun accès à un fichier original. Une erreur dans la zone de préparation laisse le texte disponible pour correction, sans enregistrer le brouillon dans IndexedDB.
+
+La cartouche active héberge un unique panneau de commandes. La recherche conserve cette cartouche même lorsqu’elle ne correspond pas au filtre, afin que ses actions restent disponibles. Les boutons de sélection et de suppression sont distincts, sans boutons imbriqués. La suppression désactive le suivi avant de retirer le document ; elle utilise la même persistance que le retrait depuis un onglet. Les scénarios vérifient notamment un callback de suivi devenu obsolète après suppression.
 
 ### Conversion et exports
 
@@ -125,6 +136,7 @@ L’assemblage est déterministe et vérifie qu’il ne reste pas de marqueur de
 | Confidentialité et CSP | Code, configuration CSP, attributs actifs, interception des requêtes simulées | Application native de la CSP et contrôle du réseau dans les outils du navigateur. |
 | Images locales | Types autorisés, chemins, taille des fichiers et incorporation aux exports | Décodage des formats par le navigateur et mémoire des images de très grandes dimensions ; la limite de 15 Mio porte sur le fichier compressé. |
 | Export et presse-papiers | Contenu du Blob, noms, liens et boutons | Téléchargement réel, emplacement choisi, permissions de copie et ouverture du fichier exporté. |
+| Collage de Markdown | Événements synthétiques, exclusions des champs et dialogues, nommage, limites, brouillon, persistance et rendu | Presse-papiers système, formats proposés par les applications sources et menu de collage natif sur mobile. |
 
 Les plafonds de complexité limitent les cas d’amplification reproduits ; ils ne garantissent pas un temps de réponse identique sur tous les appareils. La conversion reste synchrone sur le fil de l’interface, et un document proche des limites peut ralentir une machine peu puissante. L’estimation d’export est volontairement conservatrice et peut refuser une collection avant que sa taille exacte atteigne 80 Mio.
 

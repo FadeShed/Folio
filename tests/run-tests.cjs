@@ -10,7 +10,8 @@ const suites = [
   { name: 'Interface du suivi', script: 'test-watcher-dom.cjs', report: 'rapport-watcher-dom.json' },
   { name: 'Régressions de rendu et sécurité', script: 'test-security-regressions.cjs', report: 'rapport-security-regressions.json' },
   { name: 'Régressions de stockage', script: 'test-state-regressions.cjs', report: 'rapport-state-regressions.json' },
-  { name: 'Régressions fonctionnelles et accessibilité', script: 'test-functional-regressions.cjs', report: 'functional-report.json' }
+  { name: 'Régressions fonctionnelles et accessibilité', script: 'test-functional-regressions.cjs', report: 'functional-report.json' },
+  { name: 'Collage Markdown', script: 'test-paste-regressions.cjs', report: 'rapport-paste-regressions.json' }
 ];
 
 async function main() {

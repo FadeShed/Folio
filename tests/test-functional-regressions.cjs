@@ -19,8 +19,8 @@ async function check(name, fn) {
   }
   catch (error) { tests.push({name, status: 'FAIL', message: error.stack || String(error)}); }
 }
-async function session(options = {}) {
-  const ctx = H.createSession(H.freshFactory(), options);
+async function session(options = {}, factory = H.freshFactory()) {
+  const ctx = H.createSession(factory, options);
   sessions.push(ctx);
   await H.until(() => ctx.doc.getElementById('storage-status').dataset.state !== 'loading', 'initialization');
   return ctx;
@@ -100,7 +100,7 @@ module.exports = (async () => {
       assert.equal(ctx.doc.activeElement.closest('[hidden]'), null);
     } finally { ctx.close(); }
   });
-  await check('Outils latéraux : un panneau au-dessus du sommaire devient un menu accessible dans les onglets', async () => {
+  await check('Cartouche actif : commandes uniques, recherche et métadonnées accessibles selon la largeur', async () => {
     let width = 1280, prints = 0;
     const ctx = await session({beforeParse(win) {
       win.matchMedia = query => ({matches: width <= Number(query.match(/max-width:\s*(\d+)px/)?.[1] || 0), media: query, addEventListener(){}, removeEventListener(){}});
@@ -109,75 +109,162 @@ module.exports = (async () => {
       win.print = () => { prints++; };
     }});
     try {
-      const details = ctx.doc.getElementById('reader-tools-disclosure');
-      const summary = ctx.doc.getElementById('reader-tools-summary');
-      const sidebarSlot = ctx.doc.getElementById('tools-sidebar-slot');
-      const tabsSlot = ctx.doc.getElementById('tools-tab-slot');
+      const actions = ctx.doc.getElementById('document-actions');
+      const metadata = ctx.doc.getElementById('document-metadata');
+      const sidebarSlot = ctx.doc.getElementById('metadata-sidebar-slot');
       const source = ctx.doc.getElementById('source-toggle');
-      const markdown = '# Side tools\n\n## Section\n\nReading without a horizontal toolbar.';
-      assert.equal(details.hidden, true, 'No document tools in the empty state');
-      await H.imports(ctx, [H.file(ctx, 'tools.md', markdown)]);
-      assert.equal(details.parentElement, sidebarSlot);
-      assert.equal(sidebarSlot.nextElementSibling, ctx.doc.getElementById('outline'), 'Tools directly precede the TOC in one column');
-      assert(sidebarSlot.parentElement.classList.contains('reader-sidebar'));
+      const resize = value => {
+        width = value;
+        // jsdom does not apply viewport CSS media queries with our matchMedia
+        // stub. Expose the mobile controls so its focus rules model that viewport.
+        ctx.doc.querySelectorAll('.mobile-toggle').forEach(button => { button.style.display = value <= 760 ? 'inline-flex' : ''; });
+        ctx.win.dispatchEvent(new ctx.win.Event('resize'));
+      };
+      const markdown = '# Second document\n\n## Section\n\nMatching search target.';
+      assert(actions.closest('[hidden]'), 'Document actions are unavailable in the empty state');
+      await H.imports(ctx, [H.file(ctx, 'first.md', '# First document'), H.file(ctx, 'tools.md', markdown)]);
+      const activeCard = () => ctx.doc.querySelector('.file-item.active');
+      assert.equal(actions.parentElement, activeCard().querySelector(':scope > .file-actions-slot'));
+      assert.equal(metadata.parentElement, sidebarSlot);
+      assert.equal(sidebarSlot.nextElementSibling, ctx.doc.getElementById('outline'), 'Metadata precedes the TOC');
       assert.equal(ctx.doc.querySelector('#reader > .reader-tools'), null, 'No toolbar row above the reading layout');
       assert.equal(ctx.doc.querySelector('.reader-status'), null, 'No duplicate bottom status banner');
-      assert.equal(details.open, true);
-      assert.equal(details.hidden, false);
-      assert.equal(tabsSlot.hidden, true);
-      for (const id of ['reader-tools-panel', 'source-toggle', 'watch-toggle', 'print-doc', 'export-toggle']) {
+      for (const id of ['document-actions', 'source-toggle', 'watch-toggle', 'print-doc', 'export-toggle']) {
         assert.equal(ctx.doc.querySelectorAll('#' + id).length, 1, 'One live instance of ' + id);
-        assert(details.contains(ctx.doc.getElementById(id)));
+        assert(actions === ctx.doc.getElementById(id) || actions.contains(ctx.doc.getElementById(id)));
       }
-      source.focus();
-      width = 900; ctx.win.dispatchEvent(new ctx.win.Event('resize'));
-      assert.equal(details.parentElement, tabsSlot, 'Compact tools share the existing tab row');
-      assert(tabsSlot.closest('.tabsbar'));
-      assert.equal(tabsSlot.hidden, false);
-      assert.equal(details.open, false, 'Entering compact mode closes its panel');
-      assert.equal(summary.getAttribute('aria-expanded'), 'false');
-      assert.equal(ctx.win.getComputedStyle(ctx.doc.getElementById('reader-tools-panel')).display, 'none');
-      assert.equal(ctx.doc.activeElement, summary, 'Focus survives moving a control into the closed panel');
-      const open = async () => {
-        summary.click();
-        await H.until(() => details.open && summary.getAttribute('aria-expanded') === 'true', 'native tools disclosure');
-      };
-      const escape = () => ctx.doc.dispatchEvent(new ctx.win.KeyboardEvent('keydown', {key: 'Escape', bubbles: true}));
-      await open();
+      const search = ctx.doc.getElementById('search');
+      search.value = 'Matching search target';
+      search.dispatchEvent(new ctx.win.Event('input', {bubbles: true}));
+      assert.equal(H.activeTab(ctx).title, 'first.md');
+      assert(activeCard().classList.contains('outside-search'));
+      assert.match(activeCard().textContent, /En lecture\s*·\s*hors résultats/);
+      assert.equal(actions.closest('.file-item'), activeCard());
+      assert.equal(actions.closest('[hidden]'), null, 'A filtered active document keeps its commands accessible');
+      assert.equal(ctx.doc.querySelectorAll('.file-button').length, 2, 'Keep the active card alongside the matching result');
+      resize(900);
+      assert.equal(metadata.parentElement, activeCard().querySelector(':scope > .file-meta-slot'));
+      assert.equal(actions.closest('.file-item'), activeCard(), 'Commands stay in the left collection at compact widths');
+      const next = [...ctx.doc.querySelectorAll('.file-button')].find(button => button.title === 'tools.md');
+      next.click();
+      assert.equal(H.activeTab(ctx).title, 'tools.md');
+      assert.equal(actions.closest('.file-item'), activeCard());
+      assert.equal(metadata.closest('.file-item'), activeCard());
+      assert.equal(activeCard().classList.contains('outside-search'), false);
+      assert.equal(ctx.doc.querySelectorAll('.file-button').length, 1, 'A previously active nonmatching card leaves the results');
       source.click();
       assert.equal(ctx.doc.getElementById('source-view').textContent, markdown);
       assert.equal(ctx.doc.getElementById('source-view').hidden, false);
       ctx.doc.getElementById('reader-scroll').scrollTop = 137;
+      resize(600);
+      assert.equal(ctx.doc.getElementById('reader-scroll').scrollTop, 137);
+      assert.equal(ctx.doc.getElementById('source-view').hidden, false, 'Responsive metadata moves preserve Source mode');
+      ctx.doc.getElementById('sidebar-toggle').click();
       ctx.doc.getElementById('watch-menu-toggle').click();
       assert.equal(ctx.doc.getElementById('watch-menu').hidden, false);
       assert.equal(ctx.doc.activeElement, ctx.doc.getElementById('watch-toggle'));
-      escape();
+      ctx.doc.dispatchEvent(new ctx.win.KeyboardEvent('keydown', {key: 'Escape', bubbles: true}));
       assert.equal(ctx.doc.getElementById('watch-menu').hidden, true);
-      assert.equal(details.open, false);
-      assert.equal(ctx.doc.activeElement, summary);
-      await open();
-      await exported(ctx);
-      assert.equal(ctx.doc.activeElement, ctx.doc.getElementById('export-toggle'));
-      assert.equal(details.open, true, 'Export keeps its visible compact trigger available');
-      escape();
-      assert.equal(details.open, false);
-      assert.equal(ctx.doc.activeElement, summary);
-      width = 1280; ctx.win.dispatchEvent(new ctx.win.Event('resize'));
-      assert.equal(details.parentElement, sidebarSlot);
-      assert.equal(details.open, true);
-      assert.equal(summary.getAttribute('aria-expanded'), 'true');
-      assert.equal(ctx.doc.activeElement, source, 'The desktop focus avoids its hidden summary');
-      assert.equal(ctx.doc.getElementById('source-view').hidden, false, 'Responsive moves preserve Source mode');
-      assert.equal(ctx.doc.getElementById('reader-scroll').scrollTop, 137);
-      details.open = false;
-      await H.until(() => details.open, 'desktop tools always open');
+      assert.equal(ctx.doc.getElementById('sidebar').classList.contains('is-open'), false);
+      assert.equal(ctx.doc.activeElement, ctx.doc.getElementById('sidebar-toggle'));
+      ctx.doc.getElementById('sidebar-toggle').click();
+      source.click();
+      assert.equal(ctx.doc.getElementById('source-view').hidden, true);
+      assert.equal(ctx.doc.getElementById('sidebar').classList.contains('is-open'), false);
+      assert.equal(ctx.doc.activeElement, ctx.doc.getElementById('article'));
+      ctx.doc.getElementById('sidebar-toggle').click();
+      source.click();
+      assert.equal(ctx.doc.getElementById('source-view').hidden, false);
+      assert.equal(ctx.doc.getElementById('sidebar').classList.contains('is-open'), false);
+      assert.equal(ctx.doc.activeElement, ctx.doc.getElementById('source-view'));
+      resize(1280);
+      assert.equal(metadata.parentElement, sidebarSlot);
+      assert.equal(actions.closest('.file-item'), activeCard());
       ctx.doc.getElementById('print-doc').click();
       assert.equal(prints, 1);
       assert.equal(ctx.doc.getElementById('source-view').hidden, true, 'Printing selects the rendered document');
-      ctx.doc.querySelector('.tab-close').click();
-      assert.equal(details.hidden, true);
-      assert.equal(tabsSlot.hidden, true);
+      assert.equal(H.activeTab(ctx).title, 'tools.md', 'Using a card command must not reselect an enclosing row');
+      source.focus(); resize(600);
+      assert.equal(ctx.doc.activeElement, ctx.doc.getElementById('sidebar-toggle'), 'A now-hidden collection command transfers focus to the visible mobile opener');
+      resize(1280);
+      assert(ctx.doc.activeElement.matches('.file-button.active'), 'The now-hidden mobile opener transfers focus back to the visible active card');
+      assert.equal(ctx.doc.activeElement.title, 'tools.md');
     } finally { ctx.close(); }
+  });
+  await check('Corbeilles de collection : sélection, focus mobile et retraits mémorisés restent cohérents', async () => {
+    const factory = H.freshFactory();
+    const ctx = await session({beforeParse(win) {
+      win.matchMedia = query => ({matches: 600 <= Number(query.match(/max-width:\s*(\d+)px/)?.[1] || 0), media: query, addEventListener(){}, removeEventListener(){}});
+    }}, factory);
+    const remove = name => {
+      const card = [...ctx.doc.querySelectorAll('.file-item')].find(item => item.querySelector('.file-button')?.title === name);
+      const button = card?.querySelector('.file-remove[data-remove-id]');
+      assert(button, 'Each card exposes its own removal button');
+      assert.match(button.getAttribute('aria-label') || '', new RegExp('Supprimer .*' + name.replace(/[.*+?^${}()|[\]\\]/g, '\\$&') + '.* de la collection'));
+      button.focus(); button.click();
+    };
+    try {
+      await H.imports(ctx, [H.file(ctx, 'one.md', '# One'), H.file(ctx, 'two.md', '# Two'), H.file(ctx, 'three.md', '# Three')]);
+      ctx.doc.getElementById('remember-collection').click();
+      await H.until(() => ctx.doc.getElementById('storage-status').dataset.state === 'saved', 'initial collection saved');
+      ctx.doc.getElementById('sidebar-toggle').click();
+      remove('three.md');
+      assert.equal(H.activeTab(ctx).title, 'one.md', 'Deleting an inactive card must preserve the current document');
+      assert.equal(ctx.doc.querySelector('#article h1').textContent, 'One');
+      assert.equal(ctx.doc.getElementById('sidebar').classList.contains('is-open'), true);
+      assert(ctx.doc.activeElement.matches('.file-button'));
+      assert(ctx.doc.activeElement.isConnected);
+      remove('one.md');
+      assert.equal(H.activeTab(ctx).title, 'two.md');
+      assert.equal(ctx.doc.activeElement.title, 'two.md');
+      assert.equal(ctx.doc.getElementById('sidebar').classList.contains('is-open'), true);
+      await H.until(() => ctx.doc.getElementById('storage-status').dataset.state === 'saved', 'removals saved');
+      assert.deepEqual((await ctx.win.FolioStorage.read()).snapshot.docs.map(doc => doc.path), ['two.md']);
+      const restored = await session({}, factory);
+      try { assert.equal(H.activeTab(restored).title, 'two.md'); assert.equal(restored.doc.querySelectorAll('[role="tab"]').length, 1); }
+      finally { restored.close(); }
+      remove('two.md');
+      assert.equal(ctx.doc.querySelectorAll('[role="tab"]').length, 0);
+      assert.equal(ctx.doc.getElementById('welcome').hidden, false);
+      assert(ctx.doc.activeElement.matches('[data-action="import"]'));
+      assert.equal(ctx.doc.activeElement.closest('[hidden]'), null);
+      assert(ctx.doc.getElementById('document-actions').closest('[hidden]'));
+      await H.until(() => ctx.doc.getElementById('storage-status').dataset.state === 'saved', 'empty collection saved');
+      assert.equal((await ctx.win.FolioStorage.read()).snapshot.docs.length, 0);
+    } finally { ctx.close(); }
+  });
+  await check('Corbeille pendant une lecture suivie : arrêt du suivi sans réapparition du document', async () => {
+    let handle, release;
+    const ctx = await session({beforeParse(win) {
+      Object.defineProperty(win, 'isSecureContext', {value: true});
+      win.showOpenFilePicker = async () => [handle];
+    }});
+    const model = {content: '# Original', version: 1, gate: null, entered: false, reads: 0};
+    handle = {kind: 'file', name: 'tracked.md', queryPermission: async () => 'granted', requestPermission: async () => 'granted',
+      getFile: async () => {
+        model.reads++; const content = model.content, gate = model.gate;
+        const result = new ctx.win.File([content], 'tracked.md', {lastModified: model.version});
+        if (gate) result.arrayBuffer = async () => { model.entered = true; await gate; return new TextEncoder().encode(content).buffer; };
+        return result;
+      }};
+    try {
+      await H.imports(ctx, [H.file(ctx, 'tracked.md', '# Imported'), H.file(ctx, 'other.md', '# Other')]);
+      const id = H.activeTab(ctx).dataset.docId;
+      ctx.doc.getElementById('watch-toggle').click();
+      await H.until(() => ctx.doc.getElementById('watch-status').dataset.state === 'watching', 'linked original');
+      model.content = '# Too late'; model.version = 2; model.gate = new Promise(resolve => { release = resolve; });
+      const pending = ctx.win.FolioWatcher.checkNow(id);
+      await H.until(() => model.entered, 'pending original read');
+      ctx.doc.querySelector('.file-remove[data-remove-id="' + id + '"]').click();
+      release(); assert.equal(await pending, false);
+      assert.equal(H.activeTab(ctx).title, 'other.md');
+      assert.equal(ctx.doc.querySelectorAll('[role="tab"]').length, 1);
+      assert.equal(ctx.doc.querySelector('#article h1').textContent, 'Other');
+      const reads = model.reads;
+      assert.equal(await ctx.win.FolioWatcher.checkNow(id), false);
+      ctx.win.dispatchEvent(new ctx.win.Event('focus')); await H.delay(30);
+      assert.equal(model.reads, reads, 'No later disk read after removal');
+    } finally { if (release) release(); ctx.close(); }
   });
   await check('Libellé de code borné : le fence très long ne duplique pas son langage et conserve le code source', async () => {
     const ctx = await session();

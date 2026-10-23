@@ -2,16 +2,16 @@
 
 **Un lecteur Markdown local, avec onglets, formules mathématiques et export HTML.**
 
-Folio transforme une collection de fichiers Markdown en un espace de lecture avec recherche et sommaire. Ouvrez plusieurs documents, retrouvez votre collection à la prochaine visite et suivez les modifications de vos originaux si vous le souhaitez. Vous pouvez ensuite emporter une page ou toute la collection dans un HTML autonome.
+Folio transforme une collection de fichiers Markdown en un espace de lecture avec recherche et sommaire. Importez vos fichiers ou collez du Markdown pour créer une note datée. Ouvrez plusieurs documents, retrouvez votre collection à la prochaine visite et suivez les modifications de vos originaux si vous le souhaitez. Vous pouvez ensuite emporter une page ou toute la collection dans un HTML autonome.
 
 Tout tient dans **[Folio.html](Folio.html)** : l’application, les bibliothèques, les styles et les polices. La conversion s’effectue dans le navigateur, sans serveur de traitement et sans envoi des documents. Le même fichier s’ouvre directement sur votre ordinateur ou se dépose sur un hébergement statique.
 
 ## Démarrer
 
 1. Téléchargez `Folio.html`, puis ouvrez-le dans votre navigateur.
-2. Cliquez sur **Importer des fichiers**, glissez vos documents dans la page ou utilisez **Ouvrir un dossier**.
+2. Cliquez sur **Importer des fichiers**, glissez vos documents dans la page, utilisez **Ouvrir un dossier** ou **Coller du Markdown**.
 3. Naviguez entre les onglets. La recherche porte sur les noms et le texte ; le sommaire permet de rejoindre les titres.
-4. Dans **Télécharger**, choisissez le document affiché ou toute la collection pour obtenir un HTML autonome.
+4. Dans la cartouche du document actif, à gauche, **Télécharger** propose le document affiché ou toute la collection sous forme de HTML autonome.
 
 Pour héberger Folio, déposez simplement `Folio.html` sur un hébergement statique et partagez son URL, par exemple `https://exemple.fr/Folio.html`. Aucun compte, serveur applicatif, paquet npm ni étape de compilation ne sont nécessaires pour l’utiliser. Ce dépôt ne déclenche aucune publication automatique.
 
@@ -20,6 +20,7 @@ L’ouverture directe depuis le disque convient à la lecture et à l’export. 
 ## Ce que Folio propose
 
 - Import multiple de fichiers `.md`, `.markdown`, `.mdown` et `.mkd`, encodés en UTF-8.
+- Collage de Markdown depuis la page ou une zone de saisie dédiée, avec création d’un document au nom daté.
 - Navigation par onglets, recherche, sommaire, mode Source, thèmes clair et sombre, interface adaptée aux petits écrans.
 - Titres, listes, tableaux, citations, listes de tâches et blocs de code avec copie.
 - Formules mathématiques rendues par KaTeX, avec les polices intégrées.
@@ -27,8 +28,26 @@ L’ouverture directe depuis le disque convient à la lecture et à l’export. 
 - Export du document courant ou de toute la collection dans un seul HTML avec ses onglets.
 - Impression, y compris l’enregistrement en PDF proposé par le navigateur.
 - Mémorisation locale facultative de la collection et suivi facultatif des fichiers originaux.
+- Suppression d’un document depuis sa cartouche, sans modification du fichier original.
 
-Sur grand écran, les informations de lecture et les commandes du document occupent la colonne de droite, juste au-dessus du sommaire. Sur les écrans plus étroits, ouvrez **Outils** dans la rangée des onglets pour retrouver les commandes. La zone centrale reste consacrée au document, sans bandeau de métadonnées ni bandeau inférieur.
+La cartouche du document actif, dans la colonne de gauche, regroupe **Source**, **Suivi**, **Imprimer** et **Télécharger**. Chaque document possède une corbeille visible. Les menus se déplient dans la cartouche, et les onglets permettent de changer de document. Pendant une recherche, le document en lecture reste accessible avec la mention « En lecture · hors résultats » s’il ne correspond pas au filtre.
+
+Sur grand écran, les informations de lecture occupent la colonne de droite, juste au-dessus du sommaire. Sur un écran plus étroit, elles rejoignent la cartouche active ; sur mobile, le bouton de collection dans les onglets ouvre la colonne de gauche et ses commandes. La zone centrale reste consacrée au document, sans bandeau de métadonnées ni bandeau inférieur.
+
+### Coller du Markdown
+
+Deux possibilités :
+
+- **Collage direct :** cliquez dans la page, hors d’un champ de saisie, puis collez avec `Ctrl V`, `⌘ V` ou la commande de collage de votre navigateur. Folio crée et affiche immédiatement le nouveau document.
+- **Zone dédiée :** cliquez sur **Coller du Markdown**, collez ou préparez le texte, puis choisissez **Créer le document**. `Ctrl Entrée` ou `⌘ Entrée` valide également la saisie. Un texte refusé reste dans cette zone pour pouvoir être corrigé.
+
+Le document reçoit un nom tel que `Collage-2026-10-23_14-05-09.md`, à partir de la date et de l’heure locales du navigateur. Si ce nom existe déjà, un suffixe `-2`, `-3`, etc. évite de remplacer un document. Il s’ouvre en mode lecture et la recherche est réinitialisée pour le rendre visible.
+
+Le texte brut est interprété comme du Markdown : les titres, listes, blocs de code et formules sont rendus normalement ; un texte simple devient un paragraphe. Folio ne convertit pas la représentation HTML du presse-papiers en Markdown. Copiez le **texte source** pour conserver ses délimiteurs de mise en forme et de mathématiques. Les images et fichiers présents dans le presse-papiers doivent être ajoutés avec les commandes d’import.
+
+Le collage dans la recherche, un champ de saisie ou un dialogue conserve son comportement habituel. Folio ne lit le presse-papiers qu’au travers de l’action de collage, sans demande d’accès automatique ou en arrière-plan. Les mêmes limites d’import et de rendu s’appliquent aux textes collés.
+
+Un collage crée un document dans la collection du navigateur, sans écrire un fichier sur le disque ni autoriser un suivi d’original. La mémorisation facultative et les exports HTML permettent de le conserver comme les autres documents. Le brouillon de la zone de collage reste temporaire et n’est pas mémorisé dans IndexedDB.
 
 ### Formules mathématiques
 
@@ -69,6 +88,7 @@ Ces propriétés décrivent le code fourni dans ce dépôt. Choisissez une versi
 La case **Mémoriser cette collection sur cet appareil** est décochée par défaut. En l’activant, vous autorisez l’enregistrement d’une copie des documents et des images dans IndexedDB, le stockage local de ce navigateur. Attendez le message **Collection mémorisée** avant de fermer la page.
 
 - Les ajouts, les mises à jour et les retraits sont enregistrés pendant la session.
+- La corbeille d’une cartouche supprime ce document de la collection et arrête son suivi. Elle ne supprime ni ne modifie son fichier original.
 - Fermer un onglet de document le retire aussi de la collection mémorisée.
 - **Vider la collection** retire les documents et les images de Folio.
 - Décocher la case supprime la copie enregistrée et garde la collection actuellement affichée en mémoire. Vérifiez la confirmation de l’effacement si une erreur est signalée.
@@ -83,7 +103,7 @@ Le stockage reste soumis aux autorisations, aux quotas et aux règles du navigat
 
 ### Suivre un original modifié dans un éditeur
 
-1. Ouvrez le document dans Folio, puis cliquez sur l’icône à deux flèches dans les commandes du document.
+1. Ouvrez le document dans Folio, puis cliquez sur **Suivi**, dans sa cartouche à gauche.
 2. Cochez **Recharger automatiquement**.
 3. Dans le sélecteur du navigateur, choisissez le fichier Markdown original correspondant.
 
@@ -110,6 +130,8 @@ Le suivi utilise l’API File System Access et nécessite un navigateur compatib
 | Structure du rendu | 40 000 nœuds par document ; 200 000 pour la collection |
 | Un export HTML | Budget de 80 Mio, évalué par une estimation conservatrice avant sa création |
 | Recherche | `Ctrl K` ou `⌘ K` |
+| Coller un document | `Ctrl V` ou `⌘ V` hors des champs de saisie |
+| Valider la zone de collage | `Ctrl Entrée` ou `⌘ Entrée` |
 | Onglets | Flèches gauche/droite, `Début` et `Fin` ; `Suppr` pour fermer |
 | Extensions non interprétées | Mermaid, notes de bas de page, macros de documents LaTeX |
 
@@ -156,7 +178,7 @@ npm ci && npm test
 
 `npm ci` installe les dépendances de développement. Les tests couvrent le rendu et la sécurité, les exports, la conservation locale et le suivi des originaux. Les rapports sont écrits dans `tests/output/`.
 
-Ces tests exécutent l’application dans **jsdom**, avec IndexedDB simulé et des références de fichiers simulées. Ce sont des tests du DOM et de la logique applicative, pas des tests dans un véritable navigateur. Les dialogues natifs, les autorisations File System Access, le rendu visuel, les téléchargements et les variations entre navigateurs doivent aussi être vérifiés manuellement.
+Ces tests exécutent l’application dans **jsdom**, avec IndexedDB simulé, des références de fichiers simulées et des événements de collage construits pour les scénarios. Ce sont des tests du DOM et de la logique applicative, pas des tests dans un véritable navigateur. Le presse-papiers système, les dialogues natifs, les autorisations File System Access, le rendu visuel, les téléchargements et les variations entre navigateurs doivent aussi être vérifiés manuellement.
 
 ## Licences
 

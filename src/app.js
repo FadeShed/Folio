@@ -17,6 +17,8 @@
     down:'<path d="m6 9 6 6 6-6"/>',
     arrow:'<path d="M4 12h16m-6-6 6 6-6 6"/>',
     close:'<path d="m6 6 12 12M18 6 6 18"/>',
+    trash:'<path d="M4 7h16M9 7V4h6v3M6 7l1 14h10l1-14M10 11v6M14 11v6"/>',
+    paste:'<rect x="5" y="5" width="14" height="16" rx="2"/><path d="M9 3h6v4H9zM9 12h6M9 16h4"/>',
     upload:'<path d="M12 16V3m-5 5 5-5 5 5M4 15v6h16v-6"/>',
     download:'<path d="M12 3v13m-5-5 5 5 5-5M4 16v5h16v-5"/>',
     tabs:'<rect x="3" y="4" width="18" height="16" rx="2"/><path d="M3 9h18M9 4v5M15 4v5"/>',
@@ -30,7 +32,7 @@
   function icon(name) { return '<svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">'+(ICONS[name]||ICONS.file)+'</svg>'; }
   document.querySelectorAll('[data-icon]').forEach(el => { el.innerHTML=icon(el.dataset.icon); });
   const state = {docs:[], assets:new Map(), active:null, next:1, source:false, busy:false, dragDepth:0};
-  const toolsLayout = {compact:null};
+  const pasteState = {submitting:false,returnFocus:null};
   const local = {ready:false, requested:false, committed:false, revision:0, running:false, dirty:false, timer:0, error:null, blocked:null, savedCount:0, handlesDisabled:false};
   const MAX_DOC = 5*1024*1024, MAX_IMAGE=15*1024*1024, MAX_TOTAL=80*1024*1024, MAX_COUNT=200;
   const MAX_ASSETS=3000, MAX_IMPORT_ENTRIES=3000, MAX_DEPTH=64, MAX_PATH=4096, MAX_RENDER_NODES=200000, MAX_EXPORT=80*1024*1024;
@@ -140,8 +142,8 @@ Un prix n’est pas une formule : écrivez \$12 pour afficher un dollar littéra
   const newWatch=()=>({enabled:false,handle:null,status:'off',message:'',choosing:false,updatedAt:null});
   function setBusyUI(busy) {
     state.busy=busy;
-    document.querySelectorAll('[data-action],#clear-all,#confirm-clear,#load-demo,#export-toggle').forEach(button=>button.disabled=busy);
-    updateStorageUI();updateWatchUI();
+    document.querySelectorAll('[data-action],.file-remove,#clear-all,#confirm-clear,#load-demo,#export-toggle').forEach(button=>button.disabled=busy);
+    updateStorageUI();updateWatchUI();updatePasteUI();
   }
   function updateStorageUI() {
     const input=$('remember-collection'),status=$('storage-status'),retry=$('storage-retry');
@@ -322,30 +324,18 @@ Un prix n’est pas une formule : écrivez \$12 pour afficher un dollar littéra
   }
   const isExternal=href=>/^(?:https?:)?\/\//i.test(href);
   const isScheme=href=>/^[a-z][a-z\d+.-]*:/i.test(href);
-  function syncReaderTools() {
-    const details=$('reader-tools-disclosure'),summary=$('reader-tools-summary');
-    const compact=matchMedia('(max-width:1050px)').matches,previous=toolsLayout.compact;
-    const focused=document.activeElement,inside=details.contains(focused);
-    const destination=$(compact?'tools-tab-slot':'tools-sidebar-slot'),moved=details.parentElement!==destination;
-    if(moved)destination.append(details);
-    toolsLayout.compact=compact;details.classList.toggle('is-compact',compact);
-    details.hidden=!state.active;$('tools-tab-slot').hidden=!compact||!state.active;
-    if(!compact)details.open=true;
-    else if(previous!==true||!state.active){details.open=false;closeExport();closeWatchMenu();}
-    summary.setAttribute('aria-expanded',String(details.open));
-    // Moving a focused control between layout slots can blur it. Keep its
-    // position unless the compact panel just closed or the summary disappeared.
-    if(moved&&inside&&state.active){
-      const target=compact&&!details.open?summary:!compact&&focused===summary?$('source-toggle'):focused;
-      target?.focus({preventScroll:true});
-    }
+  function syncDocumentPanels() {
+    const card=$('file-list').querySelector('.file-item.active'),actions=$('document-actions'),metadata=$('document-metadata');
+    const actionSlot=card?.querySelector('.file-actions-slot')||$('document-actions-parking');
+    const metaSlot=card&&matchMedia('(max-width:1050px)').matches?card.querySelector('.file-meta-slot'):$('metadata-sidebar-slot');
+    if(actions.parentElement!==actionSlot)actionSlot.append(actions);
+    if(metadata.parentElement!==metaSlot)metaSlot.append(metadata);
+    actions.hidden=!card;metadata.hidden=!state.active;
+    actions.setAttribute('aria-label',activeDoc()?'Actions pour '+baseName(activeDoc().path):'Actions du document');
   }
-  function closeReaderTools(returnFocus=false) {
-    const details=$('reader-tools-disclosure');
-    if(!toolsLayout.compact||!details.open)return;
-    details.open=false;$('reader-tools-summary').setAttribute('aria-expanded','false');
-    closeExport();closeWatchMenu();
-    if(returnFocus&&state.active)$('reader-tools-summary').focus({preventScroll:true});
+  function focusCollectionControl(control) {
+    if(matchMedia('(max-width:760px)').matches&&!$('sidebar').classList.contains('is-open'))$('sidebar-toggle').focus({preventScroll:true});
+    else control?.focus({preventScroll:true});
   }
   function setSidebar(open,options={}) {
     $('sidebar').classList.toggle('is-open',open);$('mobile-backdrop').classList.toggle('is-open',open);$('sidebar-toggle').setAttribute('aria-expanded',String(open));
@@ -353,28 +343,44 @@ Un prix n’est pas une formule : écrivez \$12 pour afficher un dollar littéra
     if(!open&&options.returnFocus)$('sidebar-toggle').focus();
   }
   function updateFileList() {
-    const focused=document.activeElement?.classList.contains('file-button')?document.activeElement.dataset.docId:null;
+    const focused=document.activeElement,actions=$('document-actions'),metadata=$('document-metadata'),list=$('file-list');
+    const actionFocused=actions.contains(focused),fileFocused=focused?.matches('.file-button,.file-remove');
+    const focusedId=fileFocused?(focused.dataset.docId||focused.dataset.removeId):null,removeFocused=!!focused?.dataset.removeId;
+    const scroll=list.scrollTop;
     const query=normalizeSearch($('search').value.trim());
-    const docs=state.docs.filter(doc=>!query || doc.search.includes(query));
+    const matches=state.docs.filter(doc=>!query||doc.search.includes(query));
+    // Keep the document being read, and its controls, available while filtering.
+    const docs=state.docs.filter(doc=>doc.id===state.active||matches.includes(doc));
     $('doc-count').textContent=String(state.docs.length);
     $('clear-all').hidden=!state.docs.length&&!state.assets.size;
+    // Park the live controls before replacing cards: listeners, open menus and
+    // file permissions belong to this one panel, never to a cloned toolbar.
+    $('document-actions-parking').append(actions);
+    $('metadata-sidebar-slot').append(metadata);
     const fragment=document.createDocumentFragment();
-    if(!docs.length) {
+    if(!matches.length) {
       const li=document.createElement('li');li.className='sidebar-empty';
       li.innerHTML=icon(query?'search':'file');
       const text=document.createElement('span');text.textContent=query?'Aucun document trouvé.':'Votre collection commence ici.\nAjoutez vos premiers documents.';text.style.whiteSpace='pre-line';li.append(text);fragment.append(li);
     }
     docs.forEach(doc=>{
-      const li=document.createElement('li');li.className='file-item';
+      const active=state.active===doc.id,outside=!!query&&!doc.search.includes(query);
+      const li=document.createElement('li');li.className='file-item'+(active?' active':'')+(outside?' outside-search':'');li.dataset.docId=doc.id;
+      const header=document.createElement('div');header.className='file-card-header';
       const button=document.createElement('button');button.className='file-button'+(state.active===doc.id?' active':'');button.dataset.docId=doc.id;button.title=doc.path;button.setAttribute('aria-current',state.active===doc.id?'page':'false');button.innerHTML=icon('file');
       const info=document.createElement('span');info.className='file-info';
-      const name=document.createElement('span');name.className='file-name';name.textContent=baseName(doc.path).replace(MD_PATTERN,'');
+      const name=document.createElement('span');name.className='file-name';name.textContent=baseName(doc.path);
       const subtitle=document.createElement('span');subtitle.className='file-path';subtitle.textContent=directory(doc.path).replace(/\/$/,'')||plainTitle(doc);
       info.append(name,subtitle);button.append(info);
-      const ext=document.createElement('span');ext.className='file-ext';ext.textContent='md';button.append(ext);li.append(button);fragment.append(li);
+      const remove=document.createElement('button');remove.type='button';remove.className='file-remove';remove.dataset.removeId=doc.id;remove.disabled=state.busy;remove.setAttribute('aria-label','Supprimer '+baseName(doc.path)+' de la collection');remove.title='Supprimer de la collection · l’original est conservé';remove.innerHTML=icon('trash');
+      header.append(button,remove);li.append(header);
+      if(outside){const context=document.createElement('p');context.className='file-context';context.textContent='En lecture · hors résultats';li.append(context);}
+      const metaSlot=document.createElement('div');metaSlot.className='file-meta-slot';
+      const actionSlot=document.createElement('div');actionSlot.className='file-actions-slot';li.append(metaSlot,actionSlot);fragment.append(li);
     });
-    $('file-list').replaceChildren(fragment);
-    if(focused)$('file-list').querySelector('[data-doc-id="'+focused+'"]')?.focus({preventScroll:true});
+    list.replaceChildren(fragment);syncDocumentPanels();list.scrollTop=scroll;
+    if(actionFocused&&state.active)focusCollectionControl(focused);
+    else if(focusedId)focusCollectionControl(list.querySelector(removeFocused?'.file-remove[data-remove-id="'+focusedId+'"]':'.file-button[data-doc-id="'+focusedId+'"]'));
   }
   function updateTabs() {
     const focused=document.activeElement?.closest('.tab-item'),focusedId=focused?.querySelector('[data-doc-id]')?.dataset.docId,focusedClose=!!document.activeElement?.dataset.closeId;
@@ -384,7 +390,7 @@ Un prix n’est pas une formule : écrivez \$12 pour afficher un dollar littéra
       const item=document.createElement('div');item.className='tab-item'+(doc.id===state.active?' active':'');item.setAttribute('role','presentation');
       const button=document.createElement('button');button.className='doc-tab';button.id='tab-'+doc.id;button.dataset.docId=doc.id;button.setAttribute('role','tab');button.setAttribute('aria-selected',String(doc.id===state.active));button.setAttribute('aria-controls','reader');button.tabIndex=doc.id===state.active?0:-1;button.title=doc.path;button.innerHTML=icon('file');
       const label=document.createElement('span');label.className='tab-title';label.textContent=baseName(doc.path);button.append(label);
-      const close=document.createElement('button');close.className='tab-close';close.dataset.closeId=doc.id;close.setAttribute('aria-label','Fermer '+baseName(doc.path));close.title='Fermer ce document';close.tabIndex=-1;close.innerHTML=icon('close');
+      const close=document.createElement('button');close.className='tab-close';close.dataset.closeId=doc.id;close.setAttribute('aria-label','Retirer '+baseName(doc.path)+' de la collection');close.title='Retirer de la collection';close.tabIndex=-1;close.innerHTML=icon('close');
       item.append(button,close);fragment.append(item);
     });
     $('tab-list').replaceChildren(fragment);
@@ -456,7 +462,7 @@ Un prix n’est pas une formule : écrivez \$12 pour afficher un dollar littéra
     const content=buildContent(doc,true);$('article').replaceChildren(...content.childNodes);
     $('source-view').textContent=doc.content;
     const warnings=doc.rendered.mathWarnings.length;$('math-warning').hidden=!warnings;if(warnings)$('math-warning').textContent=warnings+' formule'+(warnings>1?'s n’ont':' n’a')+' pas pu être rendue'+(warnings>1?'s':'')+'. Le texte original reste visible dans le document.';
-    updateFileList();updateTabs();updateOutline(doc);updateWatchUI();syncReaderTools();
+    updateFileList();updateTabs();updateOutline(doc);updateWatchUI();
     $('reader-scroll').scrollTop=doc[source?'sourceScroll':'scroll']||0;
     requestAnimationFrame(()=>{if(state.active!==id)return;if(options.hash)navigateAnchor(doc,options.hash,{focus:options.focusContent});else if(options.focusContent)focusContent($('article'));updateProgress();});
     if(options.focus)$('tab-'+id)?.focus();
@@ -465,18 +471,21 @@ Un prix n’est pas une formule : écrivez \$12 pour afficher un dollar littéra
     if(!options.keepMenus){closeExport();closeWatchMenu();}
     if(changed&&!options.skipPersist)persistenceChanged(250);
   }
-  function showEmpty() {state.active=null;state.source=false;$('welcome').hidden=false;$('reader').hidden=true;$('article').replaceChildren();$('source-view').textContent='';updateFileList();updateTabs();updateWatchUI();closeExport();closeWatchMenu();syncReaderTools();}
+  function showEmpty() {state.active=null;state.source=false;$('welcome').hidden=false;$('reader').hidden=true;$('article').replaceChildren();$('source-view').textContent='';updateFileList();updateTabs();updateWatchUI();closeExport();closeWatchMenu();}
   function focusContent(target) {target.setAttribute('tabindex','-1');target.focus({preventScroll:true});}
   function jumpTo(id,options={}) {const target=$(id);if(target){target.scrollIntoView({block:'start',behavior:matchMedia('(prefers-reduced-motion: reduce)').matches?'auto':'smooth'});if(options.focus)focusContent(target);return true;}return false;}
   function navigateAnchor(doc,hash,options={}) {if(!hash){$('reader-scroll').scrollTop=0;if(options.focus)focusContent($('article'));return;}const id=FolioRenderer.resolveAnchor(doc.rendered,hash);if(!id||!jumpTo(id,options)){notify('Cette section est introuvable dans le document.');if(options.focus)focusContent($('article'));}}
-  function closeDoc(id) {
+  function closeDoc(id,options={}) {
     if(state.busy){notify('La collection est en cours de chargement. Patientez un instant.');return;}
     const index=state.docs.findIndex(doc=>doc.id===id);if(index<0)return;
     FolioWatcher.unwatch(id);
-    const wasActive=state.active===id;state.docs.splice(index,1);
-    if(!state.docs.length){showEmpty();persistenceChanged();document.querySelector('[data-action="import"]').focus();return;}
-    if(wasActive)setActive(state.docs[Math.min(index,state.docs.length-1)].id,{focus:true});else{updateFileList();updateTabs();$('tab-'+state.active)?.focus();}
-    persistenceChanged();
+    const removed=state.docs[index],wasActive=state.active===id;state.docs.splice(index,1);
+    if(!state.docs.length){showEmpty();persistenceChanged();focusCollectionControl(document.querySelector('[data-action="import"]'));notify(baseName(removed.path)+' retiré de la collection.');return;}
+    const neighbor=state.docs[Math.min(index,state.docs.length-1)];
+    if(wasActive)setActive(neighbor.id,{focus:!options.fromCollection,closeSidebar:!options.fromCollection});else{updateFileList();updateTabs();}
+    if(options.fromCollection){const next=$('file-list').querySelector('.file-button[data-doc-id="'+neighbor.id+'"]')||$('file-list').querySelector('.file-button.active');focusCollectionControl(next);}
+    else $('tab-'+state.active)?.focus({preventScroll:true});
+    persistenceChanged();notify(baseName(removed.path)+' retiré de la collection.');
   }
   function totalBytes() {return state.docs.reduce((n,doc)=>n+doc.size,0)+[...state.assets.values()].reduce((n,item)=>n+item.size,0);}
   function checkRenderBudget(rendered,prior) {
@@ -493,7 +502,7 @@ Un prix n’est pas une formule : écrivez \$12 pour afficher un dollar littéra
     if(prior)state.docs[state.docs.indexOf(prior)]=doc;else state.docs.push(doc);return {doc,updated:!!prior,watchStopped:!!prior?.watch?.enabled};
   }
   function readDataURL(file,mime) {return new Promise((resolve,reject)=>{const reader=new FileReader();reader.onerror=()=>reject(new Error('Image illisible'));reader.onload=()=>{const value=String(reader.result||'');resolve('data:'+mime+';base64,'+value.slice(value.indexOf(',')+1));};reader.readAsDataURL(file);});}
-  async function importFiles(files,quiet=false) {
+  async function importFiles(files,quiet=false,options={}) {
     if(state.busy){notify('La collection est en cours de chargement. Patientez un instant.');return;}
     if(!files.length)return;
     if(files.length>MAX_IMPORT_ENTRIES){notify('Cette sélection contient plus de 3 000 fichiers. Sélectionnez un sous-dossier.',true);return;}
@@ -523,7 +532,7 @@ Un prix n’est pas une formule : écrivez \$12 pour afficher un dollar littéra
       }
     } finally {
       setBusyUI(false);$('busy-indicator').hidden=true;
-      if(first)setActive(first);else if(state.active)setActive(state.active);else{updateFileList();updateTabs();}
+      if(first)setActive(first);else if(state.active&&!options.keepCurrentOnFailure)setActive(state.active);else{updateFileList();updateTabs();}
       $('file-input').value='';$('folder-input').value='';
       if(added||updated||images)persistenceChanged();
       // An opt-out or a failed removal retried during this import may be queued
@@ -534,6 +543,86 @@ Un prix n’est pas une formule : écrivez \$12 pour afficher un dollar littéra
     if(watchStopped)parts.push('Suivi désactivé pour '+watchStopped+' document'+(watchStopped>1?'s':'')+' réimporté'+(watchStopped>1?'s':'')+' : reliez à nouveau leur original pour le reprendre.');
     if(errors.length)parts.push(errors.slice(0,3).join('\n')+(errors.length>3?'\nEt '+(errors.length-3)+' autre(s) erreur(s).':''));
     if(!quiet)notify(parts.join(' · ')||'Aucun fichier compatible dans cette sélection.',!!errors.length);
+    return {added,updated,images,first,errors};
+  }
+  function updatePasteUI() {
+    const input=$('paste-input'),button=$('paste-import');
+    if(!input||!button)return;
+    input.readOnly=pasteState.submitting;
+    button.disabled=state.busy||pasteState.submitting||!input.value.trim();
+    button.textContent=pasteState.submitting?'Création…':'Créer le document';
+    $('paste-dialog').setAttribute('aria-busy',String(pasteState.submitting));
+    $('paste-dialog').querySelectorAll('[data-close]').forEach(control=>control.disabled=pasteState.submitting);
+  }
+  function pasteError(message,dialog) {
+    if(dialog){$('paste-error').textContent=message;$('paste-error').hidden=false;$('paste-input').setAttribute('aria-invalid','true');}
+    else notify(message,true);
+  }
+  function openPasteDialog() {
+    if(state.busy){notify('La collection est en cours de chargement. Patientez un instant.');return;}
+    pasteState.returnFocus=document.activeElement;
+    $('paste-error').hidden=true;$('paste-input').removeAttribute('aria-invalid');
+    updatePasteUI();$('paste-dialog').showModal();$('paste-input').focus();
+  }
+  function closePasteDialog(created=false) {
+    if(pasteState.submitting&&!created)return;
+    $('paste-dialog').close();
+    if(created){$('paste-input').value='';$('paste-error').hidden=true;$('paste-input').removeAttribute('aria-invalid');}
+    else if(pasteState.returnFocus?.isConnected){
+      if($('sidebar').contains(pasteState.returnFocus))focusCollectionControl(pasteState.returnFocus);
+      else pasteState.returnFocus.focus({preventScroll:true});
+    }
+  }
+  function pastedDocumentName() {
+    const now=new Date(),pad=(value,width=2)=>String(value).padStart(width,'0');
+    const stem='Collage-'+pad(now.getFullYear(),4)+'-'+pad(now.getMonth()+1)+'-'+pad(now.getDate())+'_'+pad(now.getHours())+'-'+pad(now.getMinutes())+'-'+pad(now.getSeconds());
+    const paths=new Set(state.docs.map(doc=>doc.path.normalize('NFC').toLowerCase()));
+    let path=stem+'.md',suffix=2;
+    while(paths.has(path.toLowerCase()))path=stem+'-'+(suffix++)+'.md';
+    return path;
+  }
+  async function importPastedText(text,dialog=false) {
+    if(state.busy){pasteError('La collection est en cours de chargement. Patientez un instant, puis collez à nouveau.',dialog);return false;}
+    if(typeof text!=='string'){pasteError('Collez du texte Markdown avant de créer le document.',dialog);return false;}
+    // Reject an obviously oversized clipboard string before allocating a File.
+    // The shared import then checks its exact UTF-8 size and all render budgets.
+    if(text.length>MAX_DOC){pasteError('Ce texte dépasse la limite de 5 Mio par document. Collez une partie plus courte.',dialog);return false;}
+    if(!text.trim()){pasteError('Collez du texte Markdown avant de créer le document.',dialog);return false;}
+    try {
+      const path=pastedDocumentName();
+      const result=await importFiles([new File([text],path,{type:'text/markdown'})],true,{keepCurrentOnFailure:true});
+      if(!result?.added){pasteError(result?.errors.join('\n')||'Le document n’a pas pu être créé. Réessayez le collage.',dialog);return false;}
+      $('search').value='';updateFileList();
+      if(dialog)closePasteDialog(true);
+      focusContent($('article'));
+      notify(path+' ajouté à la collection.');
+      return true;
+    } catch(error){pasteError('Le collage n’a pas abouti : '+(error.message||'erreur inattendue.'),dialog);return false;}
+  }
+  async function submitPastedDraft() {
+    if(pasteState.submitting)return;
+    if(state.busy){pasteError('La collection est en cours de chargement. Patientez un instant.',true);return;}
+    const text=$('paste-input').value;
+    pasteState.submitting=true;updatePasteUI();
+    try{await importPastedText(text,true);}
+    finally{pasteState.submitting=false;updatePasteUI();}
+  }
+  function pasteTargetsInput(event) {
+    const target=event.target instanceof Element?event.target:event.target?.parentElement;
+    if(!target)return false;
+    if(target.closest('input,textarea,select,[role="textbox"]'))return true;
+    const editable=target.closest('[contenteditable]');
+    return target.isContentEditable||!!editable&&editable.getAttribute('contenteditable').toLowerCase()!=='false';
+  }
+  function receivePaste(event) {
+    if(event.defaultPrevented||pasteTargetsInput(event)||document.querySelector('dialog[open]'))return;
+    const clipboard=event.clipboardData;
+    if(!clipboard||clipboard.files?.length||Array.from(clipboard.items||[]).some(item=>item.kind==='file')||Array.from(clipboard.types||[]).includes('Files'))return;
+    // Read only this paste event, synchronously. Never request background
+    // clipboard access or insert its rich HTML representation into the page.
+    let text;try{text=clipboard.getData('text/plain');}catch(_){return;}
+    if(!text||text.length<=MAX_DOC&&!text.trim())return;
+    event.preventDefault();void importPastedText(text);
   }
   async function walkEntry(entry,prefix='',budget={count:0},depth=0) {
     if(++budget.count>MAX_IMPORT_ENTRIES)throw new Error('La sélection contient plus de 3 000 fichiers et dossiers. Sélectionnez un sous-dossier.');
@@ -624,9 +713,9 @@ Un prix n’est pas une formule : écrivez \$12 pour afficher un dollar littéra
     const button=$('export-toggle');button.disabled=true;
     try {await new Promise(resolve=>requestAnimationFrame(resolve));const docs=all?[...state.docs]:[doc],paths=exportPaths();const html=makeExport(docs,paths);download(new Blob([html],{type:'text/html;charset=utf-8'}),all&&docs.length>1?'Folio-collection.html':baseName(paths.get(doc.id)));notify(all&&docs.length>1?'Collection exportée avec ses onglets, ses formules et ses images locales.':'Page HTML exportée. Elle peut être ouverte hors connexion.');}
     catch(error){notify('L’export n’a pas abouti : '+(error.message||'erreur inattendue.'),true);}
-    finally{button.disabled=state.busy;if(focusFromMenu&&!button.disabled&&state.active)(toolsLayout.compact&&!$('reader-tools-disclosure').open?$('reader-tools-summary'):button).focus({preventScroll:true});}
+    finally{button.disabled=state.busy;if(focusFromMenu&&!button.disabled&&state.active)focusCollectionControl(button);}
   }
-  $('file-list').addEventListener('click',event=>{const button=event.target.closest('[data-doc-id]');if(button)setActive(button.dataset.docId);});
+  $('file-list').addEventListener('click',event=>{const remove=event.target.closest('.file-remove[data-remove-id]');if(remove){closeDoc(remove.dataset.removeId,{fromCollection:true});return;}const button=event.target.closest('.file-button[data-doc-id]');if(button)setActive(button.dataset.docId);});
   $('tab-list').addEventListener('click',event=>{const close=event.target.closest('[data-close-id]');if(close){closeDoc(close.dataset.closeId);return;}const tab=event.target.closest('[data-doc-id]');if(tab)setActive(tab.dataset.docId,{focus:true});});
   $('tab-list').addEventListener('keydown',event=>{
     const focused=event.target.closest('[role="tab"]');if(!focused)return;const index=state.docs.findIndex(doc=>doc.id===focused.dataset.docId);let target=index;
@@ -644,11 +733,17 @@ Un prix n’est pas une formule : écrivez \$12 pour afficher un dollar littéra
   });
   document.querySelectorAll('[data-action="import"]').forEach(button=>button.addEventListener('click',()=>$('file-input').click()));
   document.querySelectorAll('[data-action="folder"]').forEach(button=>button.addEventListener('click',()=>$('folder-input').click()));
+  document.querySelectorAll('[data-action="paste"]').forEach(button=>button.addEventListener('click',openPasteDialog));
+  document.addEventListener('paste',receivePaste);
+  $('paste-input').addEventListener('input',()=>{$('paste-error').hidden=true;$('paste-input').removeAttribute('aria-invalid');updatePasteUI();});
+  $('paste-input').addEventListener('keydown',event=>{if((event.ctrlKey||event.metaKey)&&event.key==='Enter'&&!event.isComposing){event.preventDefault();void submitPastedDraft();}});
+  $('paste-import').addEventListener('click',submitPastedDraft);
+  $('paste-dialog').addEventListener('cancel',event=>{event.preventDefault();closePasteDialog();});
   $('file-input').addEventListener('change',event=>importFiles([...event.target.files]));
   $('folder-input').addEventListener('change',event=>importFiles([...event.target.files]));
   $('search').addEventListener('input',updateFileList);
   $('reader-scroll').addEventListener('scroll',()=>{if(!scrollFrame)scrollFrame=requestAnimationFrame(()=>{updateProgress();scrollFrame=0;});},{passive:true});
-  $('source-toggle').addEventListener('click',()=>{const doc=activeDoc();if(!doc)return;rememberScroll();state.source=!state.source;$('reader').classList.toggle('source-mode',state.source);$('article').hidden=state.source;$('source-view').hidden=!state.source;$('source-toggle').setAttribute('aria-pressed',String(state.source));$('source-toggle').title=state.source?'Afficher la page mise en forme':'Afficher le Markdown source';$('reader-scroll').scrollTop=doc[state.source?'sourceScroll':'scroll']||0;updateProgress();});
+  $('source-toggle').addEventListener('click',()=>{const doc=activeDoc();if(!doc)return;rememberScroll();state.source=!state.source;$('reader').classList.toggle('source-mode',state.source);$('article').hidden=state.source;$('source-view').hidden=!state.source;$('source-toggle').setAttribute('aria-pressed',String(state.source));$('source-toggle').title=state.source?'Afficher la page mise en forme':'Afficher le Markdown source';$('reader-scroll').scrollTop=doc[state.source?'sourceScroll':'scroll']||0;updateProgress();if(matchMedia('(max-width:760px)').matches){setSidebar(false);focusContent($(state.source?'source-view':'article'));}});
   $('print-doc').addEventListener('click',()=>{if(state.source)$('source-toggle').click();window.print();});
   $('export-toggle').addEventListener('click',()=>{closeWatchMenu();const hidden=!$('export-menu').hidden;$('export-menu').hidden=hidden;$('export-toggle').setAttribute('aria-expanded',String(!hidden));if(!hidden)$('export-current').focus();});
   $('export-current').addEventListener('click',()=>exportHTML(false));$('export-collection').addEventListener('click',()=>exportHTML(true));
@@ -675,19 +770,13 @@ Un prix n’est pas une formule : écrivez \$12 pour afficher un dollar littéra
   $('load-demo').addEventListener('click',()=>{const files=DEMOS.map(doc=>new File([doc.content],doc.path,{type:'text/markdown'}));importFiles(files);});
   $('theme-toggle').addEventListener('click',()=>{const dark=document.documentElement.dataset.theme!=='dark';document.documentElement.dataset.theme=dark?'dark':'light';$('theme-toggle').innerHTML=icon(dark?'sun':'moon');$('theme-toggle').setAttribute('aria-label',dark?'Activer le thème clair':'Activer le thème sombre');});
   $('help-open').addEventListener('click',()=>$('help-dialog').showModal());
-  document.querySelectorAll('[data-close]').forEach(button=>button.addEventListener('click',()=>$(button.dataset.close).close()));
+  document.querySelectorAll('[data-close]').forEach(button=>button.addEventListener('click',()=>button.dataset.close==='paste-dialog'?closePasteDialog():$(button.dataset.close).close()));
   $('clear-all').addEventListener('click',()=>$('clear-dialog').showModal());
   $('confirm-clear').addEventListener('click',()=>{if(state.busy)return;FolioWatcher.stopAll();state.docs=[];state.assets.clear();$('search').value='';$('clear-dialog').close();showEmpty();persistenceChanged();notify(local.requested?'La collection a été vidée. Vérifiez la confirmation de mémorisation dans la colonne de gauche.':'Les documents ont été retirés de cette session.');});
   $('sidebar-toggle').addEventListener('click',()=>{const open=!$('sidebar').classList.contains('is-open');setSidebar(open,{focus:open,returnFocus:!open});});
   $('sidebar-close').addEventListener('click',()=>setSidebar(false,{returnFocus:true}));$('mobile-backdrop').addEventListener('click',()=>setSidebar(false,{returnFocus:true}));
   $('toast-close').addEventListener('click',()=>$('toast').hidden=true);
-  $('reader-tools-disclosure').addEventListener('toggle',()=>{
-    const details=$('reader-tools-disclosure'),summary=$('reader-tools-summary');
-    if(!toolsLayout.compact&&!details.open)details.open=true;
-    summary.setAttribute('aria-expanded',String(details.open));
-    if(!details.open){closeExport();closeWatchMenu();if(details.contains(document.activeElement)&&document.activeElement!==summary&&state.active)summary.focus({preventScroll:true});}
-  });
-  document.addEventListener('keydown',event=>{if((event.ctrlKey||event.metaKey)&&event.key.toLowerCase()==='k'){event.preventDefault();if(matchMedia('(max-width:760px)').matches)setSidebar(true);$('search').focus();$('search').select();}if(event.key==='Escape'){closeExport(true);closeWatchMenu(true);if(!$('help-dialog').open&&!$('clear-dialog').open){const sidebarOpen=$('sidebar').classList.contains('is-open');setSidebar(false,{returnFocus:sidebarOpen});closeReaderTools(!sidebarOpen);}$('drop-overlay').hidden=true;state.dragDepth=0;}});
+  document.addEventListener('keydown',event=>{if(document.querySelector('dialog[open]'))return;if((event.ctrlKey||event.metaKey)&&event.key.toLowerCase()==='k'){event.preventDefault();if(matchMedia('(max-width:760px)').matches)setSidebar(true);$('search').focus();$('search').select();}if(event.key==='Escape'){closeExport(true);closeWatchMenu(true);const sidebarOpen=$('sidebar').classList.contains('is-open');setSidebar(false,{returnFocus:sidebarOpen});$('drop-overlay').hidden=true;state.dragDepth=0;}});
   if(!/Mac|iPhone|iPad/.test(navigator.platform))document.querySelector('.search-box kbd').textContent='Ctrl K';
   const hasFiles=event=>Array.from(event.dataTransfer?.types||[]).includes('Files');
   document.addEventListener('dragenter',event=>{if(!hasFiles(event))return;event.preventDefault();state.dragDepth++;$('drop-overlay').hidden=false;});
@@ -704,7 +793,7 @@ Un prix n’est pas une formule : écrivez \$12 pour afficher un dollar littéra
     if(files)await importFiles(files);
     flushPersistence();
   });
-  window.addEventListener('resize',()=>{syncReaderTools();updateProgress();if(!matchMedia('(max-width:760px)').matches)setSidebar(false);});
+  window.addEventListener('resize',()=>{syncDocumentPanels();updateProgress();const focused=document.activeElement,mobile=matchMedia('(max-width:760px)').matches;if(!mobile){setSidebar(false);if(focused===$('sidebar-toggle')||focused===$('sidebar-close'))$('file-list').querySelector('.file-button.active')?.focus({preventScroll:true});}else if(!$('sidebar').classList.contains('is-open')&&$('sidebar').contains(focused))$('sidebar-toggle').focus({preventScroll:true});});
   window.addEventListener('beforeunload',event=>{if(local.running||local.dirty&&(local.requested||local.committed)||state.reloadRequested&&(state.docs.length||state.assets.size)){event.preventDefault();event.returnValue='';}state.reloadRequested=false;});
   showEmpty();
   initializePersistence();
