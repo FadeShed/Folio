@@ -1,0 +1,14 @@
+{
+  "name": "folio",
+  "private": true,
+  "scripts": {
+    "test": "node tests/run-tests.cjs"
+  },
+  "engines": {
+    "node": "^22.22.2 || ^24.15.0 || >=26.0.0"
+  },
+  "devDependencies": {
+    "fake-indexeddb": "6.2.6",
+    "jsdom": "30.1.3"
+  }
+}

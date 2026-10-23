@@ -1,0 +1,407 @@
+{
+  "generatedAt": "2026-10-23T13:01:11+00:00",
+  "artifact": {
+    "path": "Folio.html",
+    "bytes": 903846,
+    "sha256": "bf2b5706026b947113dd56dd34198d9faa00268603a65143469e2e37ddafdaa4"
+  },
+  "environment": {
+    "node": "24.19.0",
+    "jsdom": "30.1.3",
+    "fake-indexeddb": "6.2.6"
+  },
+  "buildMatchesSources": true,
+  "nativeBrowserVerificationPerformed": false,
+  "validationScope": "Code review, simulated DOM/IndexedDB/file handles, dependency provenance and advisories; see AUDIT.md for native browser limitations.",
+  "passed": 72,
+  "total": 72,
+  "suites": [
+    {
+      "name": "Lecteur, sécurité et exports",
+      "script": "tests/test-folio.cjs",
+      "passed": 15,
+      "total": 15,
+      "tests": [
+        {
+          "name": "Initialisation autonome, état vide et absence d’erreur JS",
+          "status": "PASS"
+        },
+        {
+          "name": "Exemples intégrés : trois documents, tableau et cases à cocher",
+          "status": "PASS"
+        },
+        {
+          "name": "Mathématiques : KaTeX embarqué, délimiteurs et navigation de démonstration",
+          "status": "PASS"
+        },
+        {
+          "name": "Navigation clavier des onglets et focus",
+          "status": "PASS"
+        },
+        {
+          "name": "Import multiple avec chemins, image locale et fichiers ignorés",
+          "status": "PASS"
+        },
+        {
+          "name": "Sécurité : XSS, protocoles actifs, clobbering et ressources distantes",
+          "status": "PASS"
+        },
+        {
+          "name": "Maths et code : quatre expressions, code conservé, titres et IDs stables",
+          "status": "PASS"
+        },
+        {
+          "name": "Vue source : texte littéral et aller-retour vers rendu",
+          "status": "PASS"
+        },
+        {
+          "name": "Liens : chemins relatifs, titres répétés, ancres et ambiguïté",
+          "status": "PASS"
+        },
+        {
+          "name": "Recherche : accents, caractères littéraux et aucune injection",
+          "status": "PASS"
+        },
+        {
+          "name": "Export individuel : téléchargement capturé et HTML autonome reparsable",
+          "status": "PASS"
+        },
+        {
+          "name": "Export collection : onglets, isolation des IDs et liens croisés hors ligne",
+          "status": "PASS"
+        },
+        {
+          "name": "Réimport : mise à jour sans doublon, fichier vide et UTF-8 invalide isolé",
+          "status": "PASS"
+        },
+        {
+          "name": "Fermeture active, dernier onglet puis réimport",
+          "status": "PASS"
+        },
+        {
+          "name": "État final : aucune erreur JS et aucun appel réseau observé",
+          "status": "PASS"
+        }
+      ]
+    },
+    {
+      "name": "Stockage local",
+      "script": "tests/test-storage-dom.cjs",
+      "passed": 11,
+      "total": 11,
+      "tests": [
+        {
+          "name": "Opt-in désactivé par défaut : import non persistant et rechargement vide",
+          "status": "PASS"
+        },
+        {
+          "name": "Activation annoncée seulement après commit, données et onglet restaurés dans deux sessions",
+          "status": "PASS"
+        },
+        {
+          "name": "Désactivation : suppression des données avec tombstone et mode off au rechargement",
+          "status": "PASS"
+        },
+        {
+          "name": "Suppression d’un document et vidage de collection conservés au rechargement",
+          "status": "PASS"
+        },
+        {
+          "name": "Quota à l’activation : erreur explicite, aucune fausse sauvegarde et documents lisibles",
+          "status": "PASS"
+        },
+        {
+          "name": "IndexedDB refusé : état erreur sans bloquer la lecture ni annoncer une réussite",
+          "status": "PASS"
+        },
+        {
+          "name": "Transaction annulée après succès de put : pas de message saved ni de données restaurées",
+          "status": "PASS"
+        },
+        {
+          "name": "Quota pendant autosauvegarde : ancienne copie conservée, modification non annoncée comme sauvée",
+          "status": "PASS"
+        },
+        {
+          "name": "Échec de désactivation : copie conservée et état erreur, pas de fausse suppression",
+          "status": "PASS"
+        },
+        {
+          "name": "Conflit multi-onglets : édition obsolète ne rétablit ni document retiré ni collection effacée",
+          "status": "PASS"
+        },
+        {
+          "name": "Aucun accès réseau ni erreur JavaScript pendant les scénarios",
+          "status": "PASS"
+        }
+      ]
+    },
+    {
+      "name": "Module de suivi",
+      "script": "tests/test-watcher-module.cjs",
+      "passed": 10,
+      "total": 10,
+      "tests": [
+        {
+          "name": "Disponibilité et sélecteur natif limités au Markdown",
+          "status": "PASS"
+        },
+        {
+          "name": "Lecture initiale stable, modification externe appliquée et version identique ignorée",
+          "status": "PASS"
+        },
+        {
+          "name": "Fichier en cours d’écriture ignoré puis relu, inspections concurrentes mutualisées",
+          "status": "PASS"
+        },
+        {
+          "name": "Permission expirée : pause sans sollicitation automatique, reprise explicite seule",
+          "status": "PASS"
+        },
+        {
+          "name": "Version rejetée par le lecteur : pas d’acquittement, nouvelle tentative possible",
+          "status": "PASS"
+        },
+        {
+          "name": "Arrêt pendant traitement asynchrone : token invalidé et aucune application tardive",
+          "status": "PASS"
+        },
+        {
+          "name": "Page masquée : lecture suspendue, reprise à la visibilité",
+          "status": "PASS"
+        },
+        {
+          "name": "Disparition temporaire pendant sauvegarde : retour automatique sans pause durable",
+          "status": "PASS"
+        },
+        {
+          "name": "Disparition persistante : trois observations espacées, focus rapides sans épuiser le délai",
+          "status": "PASS"
+        },
+        {
+          "name": "Message d’erreur du lecteur transmis, normalisé, borné et non répété sans changement",
+          "status": "PASS"
+        }
+      ]
+    },
+    {
+      "name": "Interface du suivi",
+      "script": "tests/test-watcher-dom.cjs",
+      "passed": 7,
+      "total": 7,
+      "tests": [
+        {
+          "name": "Suivi indisponible : contrôle explicite et lecture normale préservée",
+          "status": "PASS"
+        },
+        {
+          "name": "Liaison par document : mise à jour active, source préservée, onglet inactif non sélectionné",
+          "status": "PASS"
+        },
+        {
+          "name": "Mauvais original refusé et permission rétablie uniquement par clic explicite",
+          "status": "PASS"
+        },
+        {
+          "name": "Arrêter ou fermer pendant lecture asynchrone empêche toute mise à jour tardive",
+          "status": "PASS"
+        },
+        {
+          "name": "Handle non clonable : copie mémorisée sans handle, intention de suivi restaurée avec reconnexion",
+          "status": "PASS"
+        },
+        {
+          "name": "Réimport du même nom : nouveau contenu conservé, ancien suivi et callback tardif arrêtés",
+          "status": "PASS"
+        },
+        {
+          "name": "Mise à jour externe : focus conservé sur l’onglet et la ligne de document",
+          "status": "PASS"
+        }
+      ]
+    },
+    {
+      "name": "Régressions de rendu et sécurité",
+      "script": "tests/test-security-regressions.cjs",
+      "passed": 15,
+      "total": 15,
+      "tests": [
+        {
+          "name": "Délimiteurs non fermés : lecture bornée et erreur avant blocage du thread",
+          "status": "PASS"
+        },
+        {
+          "name": "Ancres répétées : 16 000 IDs uniques sans reparcourir les suffixes précédents",
+          "status": "PASS"
+        },
+        {
+          "name": "Indices de début math : paragraphes longs, sources imbriquées et formules successives",
+          "status": "PASS"
+        },
+        {
+          "name": "Code Markdown et HTML : math littérale, y compris code imbriqué et balise non fermée",
+          "status": "PASS"
+        },
+        {
+          "name": "Limites de formules avant KaTeX : nombre, taille individuelle et cumul",
+          "status": "PASS"
+        },
+        {
+          "name": "Limites UTF-8, balises avant DOM et profondeur du document",
+          "status": "PASS"
+        },
+        {
+          "name": "Le budget DOM comprend les nœuds générés par les formules",
+          "status": "PASS"
+        },
+        {
+          "name": "Macro expansive : source de 418 caractères conservée en texte avant expansion",
+          "status": "PASS"
+        },
+        {
+          "name": "KaTeX usuel conservé : intégrale, matrice, tag, commentaire et verb littéral",
+          "status": "PASS"
+        },
+        {
+          "name": "Mesures de rendu : majorant UTF-8 utilisable avant clonage et export",
+          "status": "PASS"
+        },
+        {
+          "name": "Charge hostile : HTML nettoyé, URL actives refusées, aucune ressource distante après reparsing",
+          "status": "PASS"
+        },
+        {
+          "name": "Extension constructor ignorée ; collection mémorisée puis restaurée sans corruption",
+          "status": "PASS"
+        },
+        {
+          "name": "Réimport rejeté par le budget : la dernière version valide reste disponible",
+          "status": "PASS"
+        },
+        {
+          "name": "Image répétée : export supérieur à 80 Mio refusé avant clonage et téléchargement",
+          "status": "PASS"
+        },
+        {
+          "name": "Sélections et chemins excessifs refusés avant lecture du contenu",
+          "status": "PASS"
+        }
+      ]
+    },
+    {
+      "name": "Régressions de stockage",
+      "script": "tests/test-state-regressions.cjs",
+      "passed": 5,
+      "total": 5,
+      "tests": [
+        {
+          "name": "Désactivation derrière une écriture : la purge reprend après un import concurrent",
+          "status": "PASS"
+        },
+        {
+          "name": "Réessayer un effacement pendant un import reprend après la lecture du fichier",
+          "status": "PASS"
+        },
+        {
+          "name": "Enveloppe corrompue : diagnostic exact, récupération expliquée, aucune fausse suppression",
+          "status": "PASS"
+        },
+        {
+          "name": "Snapshot invalide avec révision valide : rejet atomique et effacement sans perdre les nouveaux imports",
+          "status": "PASS"
+        },
+        {
+          "name": "Enveloppe désactivée avec données résiduelles : corruption signalée, aucun faux état temporaire",
+          "status": "PASS"
+        }
+      ]
+    },
+    {
+      "name": "Régressions fonctionnelles et accessibilité",
+      "script": "tests/test-functional-regressions.cjs",
+      "passed": 9,
+      "total": 9,
+      "tests": [
+        {
+          "name": "Exports individuels : noms uniques et liens cohérents pour extensions Markdown concurrentes",
+          "status": "PASS"
+        },
+        {
+          "name": "Export au clavier : retour du focus au déclencheur visible après téléchargement",
+          "status": "PASS"
+        },
+        {
+          "name": "Outils latéraux : un panneau au-dessus du sommaire devient un menu accessible dans les onglets",
+          "status": "PASS"
+        },
+        {
+          "name": "Libellé de code borné : le fence très long ne duplique pas son langage et conserve le code source",
+          "status": "PASS"
+        },
+        {
+          "name": "Liste mobile : la sélection d’un document transfère le focus vers l’onglet affiché",
+          "status": "PASS"
+        },
+        {
+          "name": "Liens : repli Unicode sûr, chemins exacts et focus de lecture après navigation",
+          "status": "PASS"
+        },
+        {
+          "name": "Dépôt de plusieurs dossiers : un budget global arrête la traversée avant import partiel",
+          "status": "PASS"
+        },
+        {
+          "name": "Dépôt profondément imbriqué : arrêt avant lecture et interface récupérable",
+          "status": "PASS"
+        },
+        {
+          "name": "Contraste : petits textes secondaires et extensions atteignent 4,5:1 dans les deux thèmes",
+          "status": "PASS"
+        }
+      ]
+    }
+  ],
+  "runtimeDependencyVerification": {
+    "packages": [
+      {
+        "package": "marked",
+        "version": "18.1.1",
+        "latest": "18.1.1",
+        "tarball": "https://registry.npmjs.org/marked/-/marked-18.1.1.tgz",
+        "sha256": "c05b3cff890d35e1208805a01fd0501571d09a81e725de0559b10bdfae90adad",
+        "sri": "sha512-zEGgrtUG8crk+TrMacJSVABU4DYDDkS8uqgU3ohrn/2fW9C2AEfUrO3m6IhpIpQpl7YcVpiXXC9cSMWDANT3dg==",
+        "sri_verified": true,
+        "executable_code_matches_upstream": true
+      },
+      {
+        "package": "dompurify",
+        "version": "3.4.17",
+        "latest": "3.4.17",
+        "tarball": "https://registry.npmjs.org/dompurify/-/dompurify-3.4.17.tgz",
+        "sha256": "056cbdae276897208b88c21d1d779adfa09ad7be488a2f510a28e900d3bbffe7",
+        "sri": "sha512-B/pSlYVHQ58kqISD/yDjuJ1yfzI34m1gF4lAod2bwSRhiN4K5Cl3H8Af7hqB2PmTL911tdEudnnXn5FnhRoz0w==",
+        "sri_verified": true,
+        "executable_code_matches_upstream": true
+      },
+      {
+        "package": "katex",
+        "version": "0.19.0",
+        "latest": "0.19.0",
+        "tarball": "https://registry.npmjs.org/katex/-/katex-0.19.0.tgz",
+        "sha256": "d8e49f2fea6eeed7cdae2cf4fd48e2f1d348758aa9e5740715e4533c2c96d1ee",
+        "sri": "sha512-v6Tznz3zJ7u3niRCoDTsumM2+HA2XXcCu+WAacCeHD2z3p9A9Ks987o5FzfTGBN0e8A0vjEgIDvLbICrXpdw/Q==",
+        "sri_verified": true,
+        "executable_code_matches_upstream": true,
+        "embedded_fonts": 20,
+        "fonts_match_upstream": true,
+        "css_matches_upstream_after_font_embedding": true
+      }
+    ],
+    "advisories": {}
+  },
+  "developmentDependencyAudit": {
+    "date": "2026-10-23",
+    "packages": 37,
+    "vulnerabilities": 0
+  }
+}
