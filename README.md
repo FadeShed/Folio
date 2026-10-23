@@ -1,8 +1,10 @@
 # Folio
 
-Easy and beautiful markdown local visualization in your browser
+**Un lecteur Markdown local, avec onglets, formules mathématiques et export HTML.**
 
-Folio transforme une collection de fichiers Markdown en pages agréables à lire, avec des onglets, un sommaire et des formules mathématiques. Tout tient dans **[Folio.html](Folio.html)** : l’application, les bibliothèques, les styles et les polices. La conversion s’effectue dans le navigateur, sans serveur de traitement et sans envoi des documents.
+Folio transforme une collection de fichiers Markdown en un espace de lecture avec recherche et sommaire. Ouvrez plusieurs documents, retrouvez votre collection à la prochaine visite et suivez les modifications de vos originaux si vous le souhaitez. Vous pouvez ensuite emporter une page ou toute la collection dans un HTML autonome.
+
+Tout tient dans **[Folio.html](Folio.html)** : l’application, les bibliothèques, les styles et les polices. La conversion s’effectue dans le navigateur, sans serveur de traitement et sans envoi des documents. Le même fichier s’ouvre directement sur votre ordinateur ou se dépose sur un hébergement statique.
 
 ## Démarrer
 
