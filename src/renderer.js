@@ -294,7 +294,7 @@
     }};
   }
 
-  function render(markdown) {
+  function renderMarkdown(markdown) {
     if (typeof markdown !== 'string') throw new TypeError('Un texte Markdown est attendu.');
     if (utf8ByteLength(markdown) > limits.maxSourceBytes) throw limitError('source_bytes', 'Le document est trop volumineux (limite : 5 Mio en UTF-8). Scindez-le.');
     const mathTokens = new Map();
@@ -482,15 +482,36 @@
     const budget = measureTree(fragment, true);
     return {fragment, headings, title, wordCount, anchorMap, mathWarnings, mathCount:mathTokens.size, diagramWarnings:[], diagramCount:0, ...budget};
   }
+  function referenceResult(result) {
+    // Number semantic reading blocks, never screen lines. Imported attributes
+    // have already been stripped, and generated math/diagram internals are
+    // atomic. Titles keep their existing heading anchors instead of a number.
+    let count = 0;
+    for (const node of result.fragment.querySelectorAll('p,li,pre,table,figure,.folio-math-display')) {
+      const atomic = node.parentElement?.closest('pre,table,figure');
+      if (atomic || node.localName !== 'li' && node.parentElement?.closest('li') ||
+          node.classList.contains('folio-math-display') && node.parentElement?.closest('p')) continue;
+      const reference = 'folio-ref-' + (++count);
+      node.dataset.folioRef = String(count);
+      if (!node.id) node.id = reference;
+      result.anchorMap[reference] = node.id;
+      result.anchorMap[node.id] = node.id;
+    }
+    result.referenceCount = count;
+    Object.assign(result, measureTree(result.fragment, true));
+    return result;
+  }
+  function render(markdown) {
+    return referenceResult(renderMarkdown(markdown));
+  }
   async function renderAsync(markdown) {
-    const result = render(markdown);
+    const result = renderMarkdown(markdown);
     if (result.fragment.querySelector('pre > code.language-mermaid')) {
       Object.assign(result, await FolioDiagrams.render(result.fragment, unsupportedMathCommand));
-      // Embedded SVG data counts towards the same document/collection/export
-      // budgets as the rest of the rendered content.
-      Object.assign(result, measureTree(result.fragment, true));
     }
-    return result;
+    // Assign once, after Mermaid replaces code blocks with figures. The
+    // embedded SVG and reference attributes count towards the same budgets.
+    return referenceResult(result);
   }
   function resolveAnchor(result, rawAnchor) {
     let anchor = String(rawAnchor || '').replace(/^#/, '');

@@ -11,7 +11,7 @@ Tout tient dans **[Folio.html](Folio.html)** : l’application, les bibliothèqu
 1. Téléchargez `Folio.html`, puis ouvrez-le dans votre navigateur.
 2. Cliquez sur **Importer des fichiers**, glissez vos documents dans la page, utilisez **Ouvrir un dossier** ou **Coller du Markdown**.
 3. Naviguez entre les onglets. La recherche porte sur les noms et le texte ; le sommaire permet de rejoindre les titres.
-4. Dans la cartouche du document actif, à gauche, **Télécharger** propose le document affiché ou toute la collection sous forme de HTML autonome.
+4. Dans la cartouche du document actif, à gauche, **Télécharger** enregistre directement la vue affichée : fichier Markdown en mode Source, HTML autonome en mode HTML. Le bouton de téléchargement à côté du **+**, dans la barre d’onglets, exporte toute la collection en HTML.
 
 Pour héberger Folio, déposez simplement `Folio.html` sur un hébergement statique et partagez son URL, par exemple `https://exemple.fr/Folio.html`. Aucun compte, serveur applicatif, paquet npm ni étape de compilation ne sont nécessaires pour l’utiliser. Ce dépôt ne déclenche aucune publication automatique.
 
@@ -26,14 +26,30 @@ L’ouverture directe depuis le disque convient à la lecture et à l’export. 
 - Formules mathématiques rendues par KaTeX, avec les polices intégrées.
 - Diagrammes Mermaid affichés directement dans les documents, avec leur code source consultable et copiable.
 - Images locales PNG, JPEG, GIF, WebP et AVIF, et liens entre les Markdown importés.
-- Export du document courant ou de toute la collection dans un seul HTML avec ses onglets.
+- Téléchargement direct du document en Markdown ou en HTML selon la vue, et export de toute la collection dans un seul HTML avec ses onglets.
 - Impression, y compris l’enregistrement en PDF proposé par le navigateur.
 - Mémorisation locale facultative de la collection et suivi facultatif des fichiers originaux.
-- Suppression d’un document depuis sa cartouche, sans modification du fichier original.
+- Retrait d’un document depuis sa cartouche ou son onglet, avec annulation temporaire et sans modification du fichier original.
 
-La cartouche du document actif, dans la colonne de gauche, regroupe **Source**, **Suivi**, **Imprimer** et **Télécharger**. Chaque document possède une corbeille visible. Les menus se déplient dans la cartouche, et les onglets permettent de changer de document. Pendant une recherche, le document en lecture reste accessible avec la mention « En lecture · hors résultats » s’il ne correspond pas au filtre.
+La cartouche du document actif, dans la colonne de gauche, regroupe **Source**, **Numéros**, **Suivi**, **Imprimer** et **Télécharger**. **Source** bascule vers le Markdown original ; le même bouton, devenu **HTML**, revient au rendu. **Numéros** active la numérotation dans les deux vues, avec un réglage propre à chaque fichier, conservé avec sa copie lorsque la mémorisation est activée. Chaque document possède une corbeille visible. Le panneau de suivi se déplie dans la cartouche ; le téléchargement, lui, est direct. Pendant une recherche, le document en lecture reste accessible avec la mention « En lecture · hors résultats » s’il ne correspond pas au filtre.
+
+Changer d’onglet conserve le mode de lecture et les positions propres à chaque document, sans défilement animé pour les rétablir. Les boutons aux extrémités de la barre d’onglets permettent de replier ou de réafficher le volet des documents et, sur grand écran, celui du sommaire. La lecture utilise alors la largeur libérée.
 
 Sur grand écran, les informations de lecture occupent la colonne de droite, juste au-dessus du sommaire. Sur un écran plus étroit, elles rejoignent la cartouche active ; sur mobile, le bouton de collection dans les onglets ouvre la colonne de gauche et ses commandes. La zone centrale reste consacrée au document, sans bandeau de métadonnées ni bandeau inférieur.
+
+### Numéros de ligne et repères HTML
+
+En vue **Source**, les numéros suivent les lignes du Markdown, indépendamment des retours visuels à la ligne. Ils ne sont ajoutés ni au texte copié ni au fichier Markdown téléchargé. Le nom et l’extension Markdown d’origine sont conservés au téléchargement, sans réécrire les liens du texte.
+
+En vue **HTML**, les numéros désignent des blocs de lecture : un paragraphe, un élément de liste, un tableau, un bloc de code, une formule en bloc ou une figure. Les titres gardent leurs ancres de sommaire. Les paragraphes contenus dans un élément de liste et le contenu interne d’un tableau, d’un bloc de code ou d’une figure ne reçoivent pas de numéro supplémentaire ; les éléments d’une sous-liste ont chacun leur repère.
+
+Ces repères ne dépendent ni de la largeur de l’écran ni de la taille du texte. Dans Folio, cliquer sur un numéro copie une référence telle que `notes.md, repère 23`. Les exports HTML conservent les numéros activés et proposent des liens vers les passages correspondants. Une référence vaut pour une même version du document : ajouter un bloc plus haut peut décaler les numéros suivants.
+
+### Annuler un retrait
+
+Après un retrait depuis la corbeille ou la fermeture d’un onglet, le bouton **Annuler** du message rétablit le dernier document retiré, son emplacement et ses réglages de lecture. Il reste disponible pendant **30 secondes**, tant que la page est ouverte. Le contenu n’est gardé que temporairement en mémoire, pas dans une corbeille IndexedDB.
+
+Le retrait suivant remplace cette possibilité d’annulation. Fermer le message, vider la collection ou réimporter un document au même chemin l’annule également. Le rétablissement respecte les limites de la collection et ne remplace jamais un document déjà présent.
 
 ### Coller du Markdown
 
@@ -48,7 +64,7 @@ Le texte brut est interprété comme du Markdown : les titres, listes, blocs de 
 
 Le collage dans la recherche, un champ de saisie ou un dialogue conserve son comportement habituel. Folio ne lit le presse-papiers qu’au travers de l’action de collage, sans demande d’accès automatique ou en arrière-plan. Les mêmes limites d’import et de rendu s’appliquent aux textes collés.
 
-Un collage crée un document dans la collection du navigateur, sans écrire un fichier sur le disque ni autoriser un suivi d’original. La mémorisation facultative et les exports HTML permettent de le conserver comme les autres documents. Le brouillon de la zone de collage reste temporaire et n’est pas mémorisé dans IndexedDB.
+Un collage crée un document dans la collection du navigateur, sans écrire un fichier sur le disque ni autoriser un suivi d’original. La mémorisation facultative, le téléchargement de la source `.md` et les exports HTML permettent de le conserver comme les autres documents. Le brouillon de la zone de collage reste temporaire et n’est pas mémorisé dans IndexedDB.
 
 ### Formules mathématiques
 
@@ -83,7 +99,7 @@ Folio affiche le diagramme directement à cet endroit du document. **Voir le cod
 
 Le moteur **Mermaid 12.2.0** est embarqué dans `Folio.html` : le rendu fonctionne hors connexion, y compris après import ou collage. Les diagrammes gardent un fond clair dans les deux thèmes pour préserver la lisibilité. Les actions au clic et les ressources distantes dans les diagrammes sont désactivées. Les formules internes à Mermaid respectent aussi le refus des définitions de macros et des commandes internes de Folio ; un diagramme qui en contient garde sa source avec un message.
 
-Les exports du document courant et de la collection contiennent les diagrammes sous forme d’images SVG intégrées, avec leur source consultable. Ils n’ont pas besoin du moteur Mermaid pour être lus et conservent les diagrammes à l’impression, notamment lors d’un enregistrement en PDF. Comme le reste du contenu exporté, ces diagrammes sont des copies figées.
+Les exports HTML du document courant et de la collection contiennent les diagrammes sous forme d’images SVG intégrées, avec leur source consultable. Ils n’ont pas besoin du moteur Mermaid pour être lus et conservent les diagrammes à l’impression, notamment lors d’un enregistrement en PDF. Comme le reste du contenu exporté, ces diagrammes sont des copies figées.
 
 ### Images et liens entre documents
 
@@ -91,7 +107,7 @@ Importez les images avec vos Markdown. **Ouvrir un dossier** conserve l’arbore
 
 Les images distantes sont bloquées et remplacées par un emplacement descriptif. Elles ne sont pas téléchargées automatiquement.
 
-Les exports contiennent les styles, les formules et diagrammes déjà rendus, et les images locales utilisées. Ils sont lisibles hors connexion et constituent des copies figées. L’export de la collection garde la navigation dans un seul fichier. Les exports individuels conservent des liens vers les autres pages `.html` : pour les utiliser ensemble, placez-les selon l’arborescence relative d’origine.
+Les exports HTML contiennent les styles, les formules et diagrammes déjà rendus, les repères activés et les images locales utilisées. Ils sont lisibles hors connexion et constituent des copies figées. L’export de la collection garde la navigation dans un seul fichier. Les exports HTML individuels conservent des liens vers les autres pages `.html` : pour les utiliser ensemble, placez-les selon l’arborescence relative d’origine. Le téléchargement Markdown conserve les chemins d’images du texte source ; il n’incorpore pas les fichiers d’images.
 
 Quand plusieurs documents produiraient le même nom HTML, Folio leur attribue des noms distincts et adapte leurs liens : `note.md` et `note.markdown` deviennent par exemple `note.md.html` et `note.markdown.html`. Les suffixes supplémentaires éventuels sont déterministes pour une même collection.
 
@@ -108,6 +124,7 @@ Ces propriétés décrivent le code fourni dans ce dépôt. Choisissez une versi
 La case **Mémoriser cette collection sur cet appareil** est décochée par défaut. En l’activant, vous autorisez l’enregistrement d’une copie des documents et des images dans IndexedDB, le stockage local de ce navigateur. Attendez le message **Collection mémorisée** avant de fermer la page.
 
 - Les ajouts, les mises à jour et les retraits sont enregistrés pendant la session.
+- Le document sélectionné, le mode Source/HTML, la numérotation et les positions des deux vues sont conservés pour chaque fichier. La position est enregistrée après une courte pause dans le défilement ; attendez la confirmation de mémorisation avant de fermer.
 - La corbeille d’une cartouche supprime ce document de la collection et arrête son suivi. Elle ne supprime ni ne modifie son fichier original.
 - Fermer un onglet de document le retire aussi de la collection mémorisée.
 - **Vider la collection** retire les documents et les images de Folio.
@@ -149,6 +166,7 @@ Le suivi utilise l’API File System Access et nécessite un navigateur compatib
 | Formules | 1 000 par document ; 16 384 caractères par formule ; 131 072 caractères de formules au total |
 | Diagrammes Mermaid | 50 par document ; 16 384 caractères par diagramme ; 131 072 caractères de diagrammes au total ; 1 Mio de SVG par diagramme |
 | Structure du rendu | 40 000 nœuds par document ; 200 000 pour la collection |
+| Numérotation de la source | 40 000 lignes au maximum ; au-delà, le texte reste consultable sans numéros |
 | Un export HTML | Budget de 80 Mio, évalué par une estimation conservatrice avant sa création |
 | Recherche | `Ctrl K` ou `⌘ K` |
 | Coller un document | `Ctrl V` ou `⌘ V` hors des champs de saisie |

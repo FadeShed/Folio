@@ -12,7 +12,9 @@ const suites = [
   { name: 'Régressions de stockage', script: 'test-state-regressions.cjs', report: 'rapport-state-regressions.json' },
   { name: 'Régressions fonctionnelles et accessibilité', script: 'test-functional-regressions.cjs', report: 'functional-report.json' },
   { name: 'Collage Markdown', script: 'test-paste-regressions.cjs', report: 'rapport-paste-regressions.json' },
-  { name: 'Diagrammes Mermaid', script: 'test-mermaid.cjs', report: 'rapport-mermaid.json' }
+  { name: 'Diagrammes Mermaid', script: 'test-mermaid.cjs', report: 'rapport-mermaid.json' },
+  { name: 'Confort de lecture et numéros de ligne', script: 'test-reading-ui.cjs', report: 'rapport-reading-ui.json' },
+  { name: 'Téléchargements, reprise, repères et annulation', script: 'test-reading-features.cjs', report: 'rapport-reading-features.json' }
 ];
 
 async function main() {

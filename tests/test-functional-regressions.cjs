@@ -28,7 +28,6 @@ async function session(options = {}, factory = H.freshFactory()) {
 async function exported(ctx) {
   const count = ctx.downloads.length;
   ctx.doc.getElementById('export-toggle').click();
-  ctx.doc.getElementById('export-current').click();
   await H.until(() => ctx.downloads.length > count, 'download');
   const output = ctx.downloads.at(-1);
   return {filename: output.filename, document: new ctx.win.DOMParser().parseFromString(await output.blob.text(), 'text/html')};
@@ -95,7 +94,7 @@ module.exports = (async () => {
       assert.match(trigger.getAttribute('aria-label') || trigger.getAttribute('title') || '', /télécharger/i,
         'The download button needs a name when its visible label is hidden on narrow screens');
       assert.equal(trigger.disabled, false);
-      assert.equal(ctx.doc.getElementById('export-menu').hidden, true);
+      assert.equal(ctx.doc.getElementById('export-menu'), null, 'The document download is a direct action, without an intermediate menu');
       assert.equal(ctx.doc.activeElement, trigger);
       assert.equal(ctx.doc.activeElement.closest('[hidden]'), null);
     } finally { ctx.close(); }
@@ -129,7 +128,7 @@ module.exports = (async () => {
       assert.equal(sidebarSlot.nextElementSibling, ctx.doc.getElementById('outline'), 'Metadata precedes the TOC');
       assert.equal(ctx.doc.querySelector('#reader > .reader-tools'), null, 'No toolbar row above the reading layout');
       assert.equal(ctx.doc.querySelector('.reader-status'), null, 'No duplicate bottom status banner');
-      for (const id of ['document-actions', 'source-toggle', 'watch-toggle', 'print-doc', 'export-toggle']) {
+      for (const id of ['document-actions', 'source-toggle', 'line-numbers-toggle', 'watch-toggle', 'print-doc', 'export-toggle']) {
         assert.equal(ctx.doc.querySelectorAll('#' + id).length, 1, 'One live instance of ' + id);
         assert(actions === ctx.doc.getElementById(id) || actions.contains(ctx.doc.getElementById(id)));
       }
@@ -187,8 +186,7 @@ module.exports = (async () => {
       source.focus(); resize(600);
       assert.equal(ctx.doc.activeElement, ctx.doc.getElementById('sidebar-toggle'), 'A now-hidden collection command transfers focus to the visible mobile opener');
       resize(1280);
-      assert(ctx.doc.activeElement.matches('.file-button.active'), 'The now-hidden mobile opener transfers focus back to the visible active card');
-      assert.equal(ctx.doc.activeElement.title, 'tools.md');
+      assert.equal(ctx.doc.activeElement, ctx.doc.getElementById('sidebar-toggle'), 'The collection toggle remains visible and focused on desktop');
     } finally { ctx.close(); }
   });
   await check('Corbeilles de collection : sélection, focus mobile et retraits mémorisés restent cohérents', async () => {
@@ -277,6 +275,7 @@ module.exports = (async () => {
       assert.equal(ctx.doc.querySelector('#article pre code').textContent, code);
       ctx.doc.getElementById('source-toggle').click();
       assert.equal(ctx.doc.getElementById('source-view').textContent, source, 'Source view must keep the entire original Markdown');
+      ctx.doc.getElementById('source-toggle').click();
       const output = await exported(ctx);
       assert(output.document.querySelector('.code-bar > span').textContent.length <= 81);
       assert.equal(output.document.querySelector('pre code').textContent, code);

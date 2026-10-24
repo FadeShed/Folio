@@ -62,8 +62,7 @@ function svgText(img) {
 
 async function exportDocument(ctx, all = false) {
   const previous = ctx.downloads.length;
-  ctx.doc.getElementById('export-toggle').click();
-  ctx.doc.getElementById(all ? 'export-collection' : 'export-current').click();
+  ctx.doc.getElementById(all ? 'export-collection' : 'export-toggle').click();
   await H.until(() => ctx.downloads.length > previous, 'HTML download');
   const download = ctx.downloads.at(-1), html = await download.blob.text();
   return {html, filename: download.filename, document: new ctx.win.DOMParser().parseFromString(html, 'text/html')};
@@ -91,6 +90,7 @@ module.exports = (async () => {
     assert.equal(ctx.engine.calls.length, 0);
     const rendered = await ctx.win.FolioRenderer.renderAsync(markdown);
     assert.equal(rendered.diagramCount, 2);
+    assert.deepEqual(Array.from(rendered.fragment.querySelectorAll('[data-folio-ref]'), node => node.localName), ['figure', 'figure', 'pre', 'p'], 'Each diagram is one stable block; its retained source is not numbered again');
     assert.equal(rendered.diagramWarnings.length, 0);
     assert.equal(rendered.fragment.querySelectorAll('.folio-mermaid img.mermaid-diagram').length, 2);
     for (const image of rendered.fragment.querySelectorAll('.mermaid-diagram')) {
@@ -236,8 +236,10 @@ A->>B: $$\frac{1}{2}$$`;
     await H.until(() => ctx.engine.calls.length === 1, 'diagram rendering started');
     assert.equal(ctx.doc.getElementById('busy-indicator').hidden, false);
     assert.equal(ctx.doc.getElementById('export-toggle').disabled, true);
+    assert.equal(ctx.doc.getElementById('print-doc').disabled, true, 'Printing must not target an intermediate source view');
     release(); await importing;
     assert.equal(ctx.doc.getElementById('export-toggle').disabled, false);
+    assert.equal(ctx.doc.getElementById('print-doc').disabled, false);
     assert.equal(ctx.doc.querySelectorAll('#article .mermaid-diagram').length, 1);
     ctx.close();
   });

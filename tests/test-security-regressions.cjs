@@ -63,7 +63,7 @@ module.exports = (async () => {
   await check('Ancres répétées : 16 000 IDs uniques sans reparcourir les suffixes précédents', () => {
     const start = performance.now();
     const result = boundedRender(ctx, '<span id="same">x</span>'.repeat(16000));
-    const ids = [...result.fragment.querySelectorAll('[id]')].map(node => node.id);
+    const ids = [...result.fragment.querySelectorAll('span[id]')].map(node => node.id);
     assert.equal(ids.length, 16000); assert.equal(new Set(ids).size, ids.length);
     assert.equal(ids[0], 'folio-anchor-same'); assert.equal(ids.at(-1), 'folio-anchor-same-15999');
     assert.equal(ctx.win.FolioRenderer.resolveAnchor(result, '#same'), ids[0]);
@@ -217,7 +217,7 @@ $$x % \def ignored in this comment
     const clone = app.win.Node.prototype.cloneNode; let clones = 0;
     app.win.Node.prototype.cloneNode = function(...args){clones++; return clone.apply(this,args);};
     try {
-      app.doc.getElementById('export-current').click();
+      app.doc.getElementById('export-toggle').click();
       await until(() => !app.doc.getElementById('export-toggle').disabled, 'export budget checked');
     }
     finally { app.win.Node.prototype.cloneNode = clone; }

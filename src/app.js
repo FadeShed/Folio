@@ -26,13 +26,17 @@
     code:'<path d="m8 6-6 6 6 6m8-12 6 6-6 6m-3-15-2 18"/>',
     print:'<path d="M7 8V3h10v5M7 17H4V9h16v8h-3M7 14h10v7H7zM17 11h.01"/>',
     menu:'<path d="M4 6h16M4 12h16M4 18h16"/>',
+    panelLeft:'<rect x="3" y="4" width="18" height="16" rx="2"/><path d="M9 4v16"/>',
+    panelRight:'<rect x="3" y="4" width="18" height="16" rx="2"/><path d="M15 4v16"/>',
+    lineNumbers:'<path d="M9 6h12M9 12h12M9 18h12M3 4h1v4M3 11h2l-2 3h2M3 17h2v4H3m0-2h2"/>',
     sync:'<path d="M3 11a9 9 0 0 1 15.5-6.3L21 7M21 3v4h-4M21 13a9 9 0 0 1-15.5 6.3L3 17M3 21v-4h4"/>',
     image:'<rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="8" cy="8" r="1.5"/><path d="m21 16-6-6L3 21"/>'
   };
   function icon(name) { return '<svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">'+(ICONS[name]||ICONS.file)+'</svg>'; }
   document.querySelectorAll('[data-icon]').forEach(el => { el.innerHTML=icon(el.dataset.icon); });
-  const state = {docs:[], assets:new Map(), active:null, next:1, source:false, busy:false, dragDepth:0};
+  const state = {docs:[], assets:new Map(), active:null, next:1, source:false, busy:false, dragDepth:0, collectionCollapsed:false, outlineCollapsed:false, restoredScroll:null};
   const pasteState = {submitting:false,returnFocus:null};
+  const removal = {entry:null,timer:0};
   const local = {ready:false, requested:false, committed:false, revision:0, running:false, dirty:false, timer:0, error:null, blocked:null, savedCount:0, handlesDisabled:false};
   const MAX_DOC = 5*1024*1024, MAX_IMAGE=15*1024*1024, MAX_TOTAL=80*1024*1024, MAX_COUNT=200;
   const MAX_ASSETS=3000, MAX_IMPORT_ENTRIES=3000, MAX_DEPTH=64, MAX_PATH=4096, MAX_RENDER_NODES=200000, MAX_EXPORT=80*1024*1024;
@@ -123,7 +127,7 @@ Un prix n’est pas une formule : écrivez \$12 pour afficher un dollar littéra
     {path:'Mode-emploi.md', content:'# Emporter sa bibliothèque\n\nQuelques repères pour profiter de Folio.\n\n## Importer des documents\n\nSélectionnez plusieurs fichiers `.md` ou `.markdown`, ou glissez-les dans la fenêtre. Le bouton **Ouvrir un dossier** permet de conserver l’arborescence d’un ensemble de notes.\n\n### Images locales\n\nImportez les images avec vos notes. Un chemin comme `images/schema.png` sera résolu à partir du dossier du Markdown. Les images distantes restent bloquées pour préserver la confidentialité.\n\n## Télécharger des pages\n\nLe menu **Télécharger** propose deux formats :\n\n1. **Le document affiché** : une page HTML déjà rendue.\n2. **Toute la collection** : un HTML autonome avec tous les onglets.\n\nLa mise en page, les formules et les images locales sont intégrées. Vous pouvez ouvrir ou héberger le résultat tel quel.\n\n## Le code reste du code\n\n```python\ndef energie(masse, c=299_792_458):\n    return masse * c ** 2\n\nprint(energie(1))\n```\n\n```markdown\nUne formule $E = mc^2$ est conservée telle quelle\ndans un bloc de code.\n```\n\n## Votre espace reste local\n\nAucun compte ni envoi de documents. Sans mémorisation, recharger la page vide la collection. Pour retrouver vos notes à la prochaine ouverture, cochez **Mémoriser cette collection sur cet appareil** dans la colonne de gauche. Une copie reste alors dans ce navigateur ; décocher la case l’efface. Les fichiers téléchargés restent disponibles à l’endroit où vous les enregistrez.\n\n[Revenir au carnet de mathématiques](Mathematiques.md)\n'}
   ];
   let toastTimer=0, scrollFrame=0;
-  function notify(message, long=false) { clearTimeout(toastTimer); $('toast-message').textContent=message; $('toast').hidden=false; toastTimer=setTimeout(()=>$('toast').hidden=true,long?12000:5500); }
+  function notify(message, long=false) { clearTimeout(toastTimer); $('toast-message').textContent=message; $('toast').hidden=false; toastTimer=setTimeout(()=>{if(!removal.entry)$('toast').hidden=true;},long?12000:5500); }
   function normalizePath(value) {
     const parts=[];
     for (const part of String(value||'').replace(/\\/g,'/').split('/')) {
@@ -139,11 +143,12 @@ Un prix n’est pas une formule : écrivez \$12 pour afficher un dollar littéra
   const escapeHTML=value=>String(value).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
   const plainTitle=doc=>doc.rendered.title||baseName(doc.path).replace(MD_PATTERN,'');
   const activeDoc=()=>state.docs.find(doc=>doc.id===state.active);
+  const scrollPosition=value=>Number.isFinite(value)&&value>=0?value:0;
   const newWatch=()=>({enabled:false,handle:null,status:'off',message:'',choosing:false,updatedAt:null});
   function setBusyUI(busy) {
     state.busy=busy;
-    document.querySelectorAll('[data-action],.file-remove,#clear-all,#confirm-clear,#load-demo,#export-toggle').forEach(button=>button.disabled=busy);
-    updateStorageUI();updateWatchUI();updatePasteUI();
+    document.querySelectorAll('[data-action],.file-remove,#clear-all,#confirm-clear,#load-demo,#print-doc,#export-toggle,#export-collection').forEach(button=>button.disabled=busy);
+    updateStorageUI();updateWatchUI();updatePasteUI();updateViewUI();updateUndoUI();
   }
   function updateStorageUI() {
     const input=$('remember-collection'),status=$('storage-status'),retry=$('storage-retry');
@@ -163,7 +168,8 @@ Un prix n’est pas une formule : écrivez \$12 pour afficher un dollar littéra
     $('remember-help').textContent=local.handlesDisabled?'Copie locale ; les originaux devront être reliés à la prochaine ouverture.':'Une copie locale, dans ce navigateur.';
   }
   function collectionSnapshot() {
-    return {schema:1,docs:state.docs.map(doc=>({path:doc.path,content:doc.content,size:doc.size,watch:{enabled:!!doc.watch?.enabled,handle:doc.watch?.enabled&&!local.handlesDisabled?doc.watch.handle:null}})),assets:[...state.assets.values()].map(item=>({path:item.path,data:item.data,size:item.size})),activePath:activeDoc()?.path||null};
+    rememberScroll(true);
+    return {schema:1,docs:state.docs.map(doc=>({path:doc.path,content:doc.content,size:doc.size,lineNumbers:!!doc.lineNumbers,sourceMode:!!doc.sourceMode,scroll:doc.scroll,sourceScroll:doc.sourceScroll,watch:{enabled:!!doc.watch?.enabled,handle:doc.watch?.enabled&&!local.handlesDisabled?doc.watch.handle:null}})),assets:[...state.assets.values()].map(item=>({path:item.path,data:item.data,size:item.size})),activePath:activeDoc()?.path||null};
   }
   function persistenceChanged(delay=0) {
     if(!local.ready||!local.requested||local.blocked)return;
@@ -205,7 +211,7 @@ Un prix n’est pas une formule : écrivez \$12 pour afficher un dollar littéra
       const rendered=await FolioRenderer.renderAsync(item.content),watch=newWatch();
       if((nodes+=rendered.nodeCount)>MAX_RENDER_NODES)invalid();
       if(item.watch?.enabled===true){watch.enabled=true;watch.handle=validReadHandle(item.watch.handle)?item.watch.handle:null;watch.status='paused';watch.message=watch.handle?'Vérification de l’accès au fichier…':'Choisissez le fichier original pour reprendre le suivi.';}
-      docs.push({id:'d'+state.next++,path,content:item.content,size,rendered,scroll:0,sourceScroll:0,search:normalizeSearch(path+'\n'+rendered.title+'\n'+item.content),watch});
+      docs.push({id:'d'+state.next++,path,content:item.content,size,rendered,scroll:scrollPosition(item.scroll),sourceScroll:scrollPosition(item.sourceScroll),sourceMode:item.sourceMode===true,lineNumbers:item.lineNumbers===true,search:normalizeSearch(path+'\n'+rendered.title+'\n'+item.content),watch});
     }
     for(const item of snapshot.assets){
       if(!item||typeof item.path!=='string'||!item.path||item.path.length>MAX_PATH||typeof item.data!=='string')invalid();
@@ -267,7 +273,7 @@ Un prix n’est pas une formule : écrivez \$12 pour afficher un dollar littéra
     if(totalBytes()-doc.size+file.size>MAX_TOTAL)throw new Error('La collection dépasse la limite de 80 Mio.');
     checkRenderBudget(rendered,doc);
     doc.content=content;doc.size=file.size;doc.rendered=rendered;doc.search=normalizeSearch(doc.path+'\n'+rendered.title+'\n'+content);watch.updatedAt=Date.now();
-    if(state.active===doc.id)setActive(doc.id,{closeSidebar:false,preserveSource:true,keepMenus:true,skipPersist:true});else updateFileList();
+    if(state.active===doc.id)setActive(doc.id,{closeSidebar:false,keepMenus:true,skipPersist:true});else updateFileList();
     persistenceChanged();return true;
   }
   function startWatching(doc) {
@@ -328,18 +334,33 @@ Un prix n’est pas une formule : écrivez \$12 pour afficher un dollar littéra
   function syncDocumentPanels() {
     const card=$('file-list').querySelector('.file-item.active'),actions=$('document-actions'),metadata=$('document-metadata');
     const actionSlot=card?.querySelector('.file-actions-slot')||$('document-actions-parking');
-    const metaSlot=card&&matchMedia('(max-width:1050px)').matches?card.querySelector('.file-meta-slot'):$('metadata-sidebar-slot');
+    const metaSlot=card&&(matchMedia('(max-width:1050px)').matches||state.outlineCollapsed)?card.querySelector('.file-meta-slot'):$('metadata-sidebar-slot');
     if(actions.parentElement!==actionSlot)actionSlot.append(actions);
     if(metadata.parentElement!==metaSlot)metaSlot.append(metadata);
     actions.hidden=!card;metadata.hidden=!state.active;
     actions.setAttribute('aria-label',activeDoc()?'Actions pour '+baseName(activeDoc().path):'Actions du document');
   }
   function focusCollectionControl(control) {
-    if(matchMedia('(max-width:760px)').matches&&!$('sidebar').classList.contains('is-open'))$('sidebar-toggle').focus({preventScroll:true});
+    if(matchMedia('(max-width:760px)').matches?!$('sidebar').classList.contains('is-open'):state.collectionCollapsed)$('sidebar-toggle').focus({preventScroll:true});
     else control?.focus({preventScroll:true});
   }
+  function updatePanelUI() {
+    const mobile=matchMedia('(max-width:760px)').matches;
+    const collectionOpen=mobile?$('sidebar').classList.contains('is-open'):!state.collectionCollapsed;
+    const outlineOpen=!!state.active&&!matchMedia('(max-width:1050px)').matches&&!state.outlineCollapsed;
+    document.querySelector('.shell').classList.toggle('collection-collapsed',state.collectionCollapsed);
+    $('reader').classList.toggle('outline-collapsed',state.outlineCollapsed);
+    $('sidebar').inert=!collectionOpen;
+    $('sidebar-toggle').setAttribute('aria-expanded',String(collectionOpen));
+    $('sidebar-toggle').setAttribute('aria-label',collectionOpen?'Masquer les documents':'Afficher les documents');
+    $('sidebar-toggle').title=(collectionOpen?'Masquer':'Afficher')+' le volet des documents';
+    $('outline-toggle').disabled=!state.active;
+    $('outline-toggle').setAttribute('aria-expanded',String(outlineOpen));
+    $('outline-toggle').setAttribute('aria-label',outlineOpen?'Masquer le sommaire':'Afficher le sommaire');
+    $('outline-toggle').title=(outlineOpen?'Masquer':'Afficher')+' le volet du sommaire';
+  }
   function setSidebar(open,options={}) {
-    $('sidebar').classList.toggle('is-open',open);$('mobile-backdrop').classList.toggle('is-open',open);$('sidebar-toggle').setAttribute('aria-expanded',String(open));
+    $('sidebar').classList.toggle('is-open',open);$('mobile-backdrop').classList.toggle('is-open',open);updatePanelUI();
     if(open&&options.focus)$('sidebar-close').focus();
     if(!open&&options.returnFocus)$('sidebar-toggle').focus();
   }
@@ -396,7 +417,7 @@ Un prix n’est pas une formule : écrivez \$12 pour afficher un dollar littéra
     });
     $('tab-list').replaceChildren(fragment);
     if(focusedId){const target=focusedClose?$('tab-list').querySelector('[data-close-id="'+focusedId+'"]'):$('tab-'+focusedId);target?.focus({preventScroll:true});}
-    const selected=$('tab-'+state.active); if(selected)selected.scrollIntoView({block:'nearest',inline:'nearest'});
+    const selected=$('tab-'+state.active); if(selected)selected.scrollIntoView({block:'nearest',inline:'nearest',behavior:'instant'});
   }
   function imagePlaceholder(img,reason) {
     const box=document.createElement('span');box.className='image-placeholder';box.innerHTML=icon('image');
@@ -431,11 +452,29 @@ Un prix n’est pas une formule : écrivez \$12 pour afficher un dollar littéra
     const textarea=document.createElement('textarea');textarea.value=text;textarea.style.cssText='position:fixed;left:-10000px;top:0';document.body.append(textarea);textarea.select();
     let success=false;try{success=document.execCommand('copy');}catch(_){}textarea.remove();if(!success)notify('La copie automatique est indisponible. Sélectionnez le texte du bloc.');return success;
   }
+  function decorateReferences(root,doc,interactive) {
+    if(!doc.lineNumbers)return;
+    for(const node of root.querySelectorAll('[data-folio-ref]')){
+      let host=node;
+      if(node.localName==='table'&&node.parentElement.classList.contains('table-wrap')||node.localName==='pre'&&node.parentElement.classList.contains('code-wrap'))host=node.parentElement;
+      // Keep markers outside the clipped code/table/diagram viewport.
+      if(['pre','table','figure'].includes(node.localName)){
+        const frame=document.createElement('div');host.replaceWith(frame);frame.append(host);host=frame;
+      }
+      host.classList.add('folio-ref-block');
+      const marker=document.createElement(interactive?'button':'a');marker.className='folio-reference';
+      if(interactive)marker.type='button';else marker.href='#'+node.id;
+      marker.dataset.number=node.dataset.folioRef;
+      marker.setAttribute('aria-label',(interactive?'Copier la référence au repère ':'Lien vers le repère ')+node.dataset.folioRef);
+      marker.title=marker.getAttribute('aria-label');
+      host.prepend(marker);
+    }
+  }
   function buildContent(doc,interactive) {
     const container=document.createElement('div');container.append(doc.rendered.fragment.cloneNode(true));
     if(!doc.rendered.headings.some(h=>h.level===1)) {const title=document.createElement('h1');title.textContent=plainTitle(doc);container.prepend(title);}
     if(!doc.content.trim()) {const note=document.createElement('p');note.className='notice-empty';note.textContent='Ce document est vide.';container.append(note);}
-    hydrateImages(container,doc);decorateCode(container,interactive);return container;
+    hydrateImages(container,doc);decorateCode(container,interactive);decorateReferences(container,doc,interactive);return container;
   }
   function updateOutline(doc) {
     const container=$('outline-list');container.replaceChildren();
@@ -452,44 +491,128 @@ Un prix n’est pas une formule : écrivez \$12 pour afficher un dollar littéra
     for(const heading of doc.rendered.headings){const node=$(heading.id);if(node&&node.getBoundingClientRect().top<top+100)selected=heading.id;}
     $('outline-list').querySelectorAll('[data-heading]').forEach(button=>button.classList.toggle('current',button.dataset.heading===selected));
   }
-  function rememberScroll() {const doc=activeDoc();if(doc)doc[state.source?'sourceScroll':'scroll']=$('reader-scroll').scrollTop;}
+  function rememberScroll(passive=false) {
+    const doc=activeDoc();if(!doc)return false;
+    const top=$('reader-scroll').scrollTop,restored=state.restoredScroll;
+    if(passive&&restored?.doc===doc&&restored.source===state.source&&restored.top===top)return false;
+    const key=state.source?'sourceScroll':'scroll';
+    if(doc[key]===top)return false;
+    doc[key]=top;state.restoredScroll=null;return true;
+  }
+  function restoreScroll(doc) {
+    $('reader-scroll').scrollTop=doc[state.source?'sourceScroll':'scroll']||0;
+    state.restoredScroll={doc,source:state.source,top:$('reader-scroll').scrollTop};
+  }
+  function updateViewUI() {
+    const doc=activeDoc(),source=state.source;
+    $('reader').classList.toggle('source-mode',source);
+    $('source-view').hidden=!source;$('article').hidden=source;
+    $('source-toggle').disabled=!doc||state.busy;
+    $('source-toggle').setAttribute('aria-pressed',String(source));
+    $('source-toggle').title=source?'Afficher le rendu HTML':'Afficher le Markdown source';
+    $('source-toggle').setAttribute('aria-label',$('source-toggle').title);
+    $('source-toggle').querySelector('.source-label').textContent=source?'HTML':'Source';
+    $('article').classList.toggle('numbered',!!doc?.lineNumbers);
+    $('line-numbers-toggle').disabled=!doc||state.busy;
+    $('line-numbers-toggle').setAttribute('aria-pressed',String(!!doc?.lineNumbers));
+    $('line-numbers-toggle').setAttribute('aria-label',(doc?.lineNumbers?'Masquer':'Afficher')+(source?' les numéros de ligne dans la source Markdown':' les repères de lecture'));
+    $('line-numbers-toggle').title=$('line-numbers-toggle').getAttribute('aria-label');
+    $('export-toggle').disabled=!doc||state.busy;
+    $('export-toggle').title=source?'Télécharger ce document en Markdown':'Télécharger ce document en HTML (.html)';
+    $('export-toggle').setAttribute('aria-label',$('export-toggle').title);
+    $('export-collection').disabled=!state.docs.length||state.busy;
+  }
+  function renderSource(doc) {
+    const source=$('source-view');
+    source.textContent=doc.content;
+    source.classList.remove('numbered');
+    if(!doc.lineNumbers||!state.source)return;
+    // Numbered source must not turn a small fenced block into millions of DOM nodes.
+    let lineCount=1;
+    for(let at=doc.content.indexOf('\n');at!==-1;at=doc.content.indexOf('\n',at+1)){
+      if(++lineCount>FolioRenderer.limits.maxNodes){doc.lineNumbers=false;notify('La numérotation est limitée à 40 000 lignes. Scindez ce document pour la réactiver.',true);return;}
+    }
+    const lines=doc.content.split('\n');
+    const fragment=document.createDocumentFragment();
+    for(const [index,line] of lines.entries()){
+      const row=document.createElement('span');row.className='source-line';
+      row.textContent=line+(index<lines.length-1?'\n':'');fragment.append(row);
+    }
+    source.replaceChildren(fragment);source.classList.add('numbered');
+    source.style.setProperty('--line-number-width',Math.max(2,String(lines.length).length)+'ch');
+  }
   function setActive(id,options={}) {
     const doc=state.docs.find(item=>item.id===id);if(!doc)return;
-    const changed=state.active!==id,source=!!(options.preserveSource&&state.source);
+    // Following a document link targets rendered headings, not a hidden article
+    // in a tab that happened to be left in Source mode.
+    if(options.focusContent)doc.sourceMode=false;
+    const changed=state.active!==id,source=!!doc.sourceMode;
     const focusFromSidebar=options.closeSidebar!==false&&$('sidebar').classList.contains('is-open')&&$('sidebar').contains(document.activeElement);
     rememberScroll();state.active=id;state.source=source;
-    $('welcome').hidden=true;$('reader').hidden=false;$('reader').classList.toggle('source-mode',source);$('source-view').hidden=!source;$('article').hidden=source;$('source-toggle').setAttribute('aria-pressed',String(source));$('source-toggle').title=source?'Afficher la page mise en forme':'Afficher le Markdown source';
+    $('welcome').hidden=true;$('reader').hidden=false;
     $('document-kicker').textContent=doc.path;
     $('reading-time').textContent=Math.max(1,Math.ceil(doc.rendered.wordCount/220))+' min de lecture';
     $('word-count').textContent=doc.rendered.wordCount.toLocaleString('fr-FR')+' mots';
     $('reader').setAttribute('aria-labelledby','tab-'+doc.id);
     const content=buildContent(doc,true);$('article').replaceChildren(...content.childNodes);
-    $('source-view').textContent=doc.content;
+    renderSource(doc);updateViewUI();updatePanelUI();
     const warnings=doc.rendered.mathWarnings.length;$('math-warning').hidden=!warnings;if(warnings)$('math-warning').textContent=warnings+' formule'+(warnings>1?'s n’ont':' n’a')+' pas pu être rendue'+(warnings>1?'s':'')+'. Le texte original reste visible dans le document.';
     updateFileList();updateTabs();updateOutline(doc);updateWatchUI();
-    $('reader-scroll').scrollTop=doc[source?'sourceScroll':'scroll']||0;
+    restoreScroll(doc);
     requestAnimationFrame(()=>{if(state.active!==id)return;if(options.hash)navigateAnchor(doc,options.hash,{focus:options.focusContent});else if(options.focusContent)focusContent($('article'));updateProgress();});
-    if(options.focus)$('tab-'+id)?.focus();
+    if(options.focus)$('tab-'+id)?.focus({preventScroll:true});
     if(options.closeSidebar!==false)setSidebar(false);
     if(focusFromSidebar)$('tab-'+id)?.focus({preventScroll:true});
-    if(!options.keepMenus){closeExport();closeWatchMenu();}
+    if(!options.keepMenus)closeWatchMenu();
     if(changed&&!options.skipPersist)persistenceChanged(250);
   }
-  function showEmpty() {state.active=null;state.source=false;$('welcome').hidden=false;$('reader').hidden=true;$('article').replaceChildren();$('source-view').textContent='';updateFileList();updateTabs();updateWatchUI();closeExport();closeWatchMenu();}
+  function showEmpty() {state.active=null;state.source=false;state.restoredScroll=null;$('welcome').hidden=false;$('reader').hidden=true;$('article').replaceChildren();$('source-view').textContent='';updateFileList();updateTabs();updateWatchUI();updateViewUI();updatePanelUI();closeWatchMenu();}
   function focusContent(target) {target.setAttribute('tabindex','-1');target.focus({preventScroll:true});}
   function jumpTo(id,options={}) {const target=$(id);if(target){target.scrollIntoView({block:'start',behavior:matchMedia('(prefers-reduced-motion: reduce)').matches?'auto':'smooth'});if(options.focus)focusContent(target);return true;}return false;}
   function navigateAnchor(doc,hash,options={}) {if(!hash){$('reader-scroll').scrollTop=0;if(options.focus)focusContent($('article'));return;}const id=FolioRenderer.resolveAnchor(doc.rendered,hash);if(!id||!jumpTo(id,options)){notify('Cette section est introuvable dans le document.');if(options.focus)focusContent($('article'));}}
+  function updateUndoUI() {
+    $('undo-remove').hidden=!removal.entry;$('undo-remove').disabled=state.busy;
+    $('undo-remove').title=removal.entry?'Rétablir '+baseName(removal.entry.doc.path):'';
+  }
+  function clearUndo(expired=false) {
+    const entry=removal.entry;clearTimeout(removal.timer);removal.entry=null;removal.timer=0;
+    if(document.activeElement===$('undo-remove'))($('tab-'+state.active)||$('sidebar-toggle')).focus({preventScroll:true});
+    updateUndoUI();
+    if(expired&&$('toast-message').textContent===entry?.message)$('toast').hidden=true;
+    else if(!$('toast').hidden){clearTimeout(toastTimer);toastTimer=setTimeout(()=>$('toast').hidden=true,5500);}
+  }
+  function offerUndo(doc,index) {
+    clearUndo();
+    const message=baseName(doc.path)+' retiré de la collection.';
+    // Use a distinct document identity: a picker or watcher callback belonging
+    // to the removed object must remain obsolete even after an explicit undo.
+    removal.entry={doc:{...doc,watch:{...doc.watch,choosing:false}},index,message};
+    removal.timer=setTimeout(()=>clearUndo(true),30000);updateUndoUI();notify(message);
+  }
+  function undoRemoval() {
+    const entry=removal.entry;if(!entry||state.busy)return;
+    const doc=entry.doc;
+    try{
+      if(state.docs.some(item=>item.path===doc.path))throw new Error('Un document de même chemin existe déjà. Aucun contenu n’a été remplacé.');
+      if(state.docs.length>=MAX_COUNT||totalBytes()+doc.size>MAX_TOTAL)throw new Error('La collection n’a plus assez de place. Le retrait ne peut pas être annulé.');
+      checkRenderBudget(doc.rendered);
+      clearUndo();state.docs.splice(Math.min(entry.index,state.docs.length),0,doc);
+      setActive(doc.id,{focus:true});if(doc.watch.enabled&&doc.watch.handle)startWatching(doc);
+      persistenceChanged();notify(baseName(doc.path)+' rétabli dans la collection.');
+    }catch(error){notify(error.message||'Le document ne peut pas être rétabli.',true);}
+  }
   function closeDoc(id,options={}) {
     if(state.busy){notify('La collection est en cours de chargement. Patientez un instant.');return;}
     const index=state.docs.findIndex(doc=>doc.id===id);if(index<0)return;
-    FolioWatcher.unwatch(id);
+    rememberScroll();FolioWatcher.unwatch(id);
     const removed=state.docs[index],wasActive=state.active===id;state.docs.splice(index,1);
-    if(!state.docs.length){showEmpty();persistenceChanged();focusCollectionControl(document.querySelector('[data-action="import"]'));notify(baseName(removed.path)+' retiré de la collection.');return;}
+    offerUndo(removed,index);
+    if(!state.docs.length){showEmpty();persistenceChanged();focusCollectionControl(document.querySelector('[data-action="import"]'));return;}
     const neighbor=state.docs[Math.min(index,state.docs.length-1)];
     if(wasActive)setActive(neighbor.id,{focus:!options.fromCollection,closeSidebar:!options.fromCollection});else{updateFileList();updateTabs();}
     if(options.fromCollection){const next=$('file-list').querySelector('.file-button[data-doc-id="'+neighbor.id+'"]')||$('file-list').querySelector('.file-button.active');focusCollectionControl(next);}
     else $('tab-'+state.active)?.focus({preventScroll:true});
-    persistenceChanged();notify(baseName(removed.path)+' retiré de la collection.');
+    persistenceChanged();
   }
   function totalBytes() {return state.docs.reduce((n,doc)=>n+doc.size,0)+[...state.assets.values()].reduce((n,item)=>n+item.size,0);}
   function checkRenderBudget(rendered,prior) {
@@ -499,10 +622,11 @@ Un prix n’est pas une formule : écrivez \$12 pour afficher un dollar littéra
   async function addDocument(path,content,size) {
     const prior=state.docs.find(doc=>doc.path===path), rendered=await FolioRenderer.renderAsync(content);
     checkRenderBudget(rendered,prior);
+    if(removal.entry?.doc.path===path)clearUndo();
     if(prior)FolioWatcher.unwatch(prior.id);
     // A File imported under the same name does not prove the same disk identity.
     // Forget the old handle so it cannot overwrite this explicit new import.
-    const doc={id:prior?.id||'d'+state.next++,path,content,size,rendered,scroll:0,sourceScroll:0,search:normalizeSearch(path+'\n'+rendered.title+'\n'+content),watch:newWatch()};
+    const doc={id:prior?.id||'d'+state.next++,path,content,size,rendered,scroll:0,sourceScroll:0,sourceMode:!!prior?.sourceMode,lineNumbers:!!prior?.lineNumbers,search:normalizeSearch(path+'\n'+rendered.title+'\n'+content),watch:newWatch()};
     if(prior)state.docs[state.docs.indexOf(prior)]=doc;else state.docs.push(doc);return {doc,updated:!!prior,watchStopped:!!prior?.watch?.enabled};
   }
   function readDataURL(file,mime) {return new Promise((resolve,reject)=>{const reader=new FileReader();reader.onerror=()=>reject(new Error('Image illisible'));reader.onload=()=>{const value=String(reader.result||'');resolve('data:'+mime+';base64,'+value.slice(value.indexOf(',')+1));};reader.readAsDataURL(file);});}
@@ -636,7 +760,6 @@ Un prix n’est pas une formule : écrivez \$12 pour afficher un dollar littéra
     if(entry.isDirectory){const reader=entry.createReader(),result=[];let entries;do{entries=await new Promise((resolve,reject)=>reader.readEntries(resolve,reject));for(const child of entries)result.push(...await walkEntry(child,prefix+entry.name+'/',budget,depth+1));}while(entries.length);return result;}
     return [];
   }
-  function closeExport(returnFocus=false) {const wasOpen=!$('export-menu').hidden;$('export-menu').hidden=true;$('export-toggle').setAttribute('aria-expanded','false');if(returnFocus&&wasOpen)$('export-toggle').focus();}
   function exportPaths() {
     const key=path=>path.normalize('NFC').toLowerCase(),counts=new Map(),used=new Set(),paths=new Map();
     for(const doc of state.docs){const preferred=key(doc.path.replace(MD_PATTERN,'.html'));counts.set(preferred,(counts.get(preferred)||0)+1);}
@@ -657,6 +780,7 @@ Un prix n’est pas une formule : écrivez \$12 pour afficher un dollar littéra
       // htmlByteLength counts escaped content without cloning or serializing it.
       // Reserve extra space for prefixes, code controls, navigation and sections.
       add(doc.rendered.htmlByteLength+64*doc.rendered.nodeCount+4096+bytes(escapeHTML(doc.path))+bytes(escapeHTML(plainTitle(doc))));
+      if(doc.lineNumbers)for(const block of doc.rendered.fragment.querySelectorAll('[data-folio-ref]'))add(512+3*bytes(block.id));
       for(const heading of doc.rendered.headings)add(512+bytes(escapeHTML(heading.text))+2*bytes(heading.id));
       const imageCache=new Map();
       for(const img of doc.rendered.fragment.querySelectorAll('img')){
@@ -701,7 +825,7 @@ Un prix n’est pas une formule : écrivez \$12 pour afficher un dollar littéra
       root.querySelectorAll('[data-folio-tex]').forEach(node=>node.removeAttribute('data-folio-tex'));
       const headings=doc.rendered.headings.filter(h=>h.level>1&&h.level<5);
       const toc=headings.length?'<details class="export-toc"><summary>Sur cette page</summary><ul>'+headings.map(h=>'<li class="toc-depth-'+h.level+'"><a href="#'+escapeHTML(meta.prefix+h.id)+'">'+escapeHTML(h.text)+'</a></li>').join('')+'</ul></details>':'';
-      return '<section id="'+meta.panel+'" class="export-doc" '+(multi?'role="tabpanel" aria-labelledby="export-tab-'+meta.index+'" tabindex="0"':'')+(multi&&meta.index?' hidden':'')+'><p class="document-kicker">'+escapeHTML(doc.path)+'</p>'+toc+'<article class="prose">'+root.innerHTML+'</article></section>';
+      return '<section id="'+meta.panel+'" class="export-doc" '+(multi?'role="tabpanel" aria-labelledby="export-tab-'+meta.index+'" tabindex="0"':'')+(multi&&meta.index?' hidden':'')+'><p class="document-kicker">'+escapeHTML(doc.path)+'</p>'+toc+'<article class="prose'+(doc.lineNumbers?' numbered':'')+'">'+root.innerHTML+'</article></section>';
     }).join('\n');
     const title=multi?'Collection Folio · '+docs.length+' documents':plainTitle(docs[0]);
     const styles=['app-styles','reading-styles','math-styles'].map(id=>'<style>'+$(id).textContent+'</style>').join('\n');
@@ -711,13 +835,20 @@ Un prix n’est pas une formule : écrivez \$12 pour afficher un dollar littéra
     return '<!doctype html>\n<html lang="fr" data-theme="light"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="referrer" content="no-referrer"><meta http-equiv="Content-Security-Policy" content="'+csp+'"><title>'+escapeHTML(title)+'</title><link rel="icon" href="'+document.querySelector('link[rel="icon"]').getAttribute('href')+'">'+styles+'</head><body class="export-body"><header class="export-header"><div class="brand"><span class="brand-mark">'+icon('brand')+'</span><span class="wordmark">folio</span></div><div class="export-label">'+(multi?docs.length+' documents':'Document HTML')+'<br>Copie autonome · lecture hors connexion</div></header><main class="export-shell">'+tablist+sections+'<footer class="export-footer">Créé avec Folio · Les formules, les diagrammes, la mise en page et les images locales sont intégrés.</footer></main>'+script+'</body></html>';
   }
   function download(blob,filename) {const url=URL.createObjectURL(blob),link=document.createElement('a');link.href=url;link.download=filename;document.body.append(link);link.click();link.remove();setTimeout(()=>URL.revokeObjectURL(url),60000);}
-  async function exportHTML(all) {
-    const focusFromMenu=$('export-menu').contains(document.activeElement);
-    closeExport();const doc=activeDoc();if(!doc)return;
-    const button=$('export-toggle');button.disabled=true;
-    try {await new Promise(resolve=>requestAnimationFrame(resolve));const docs=all?[...state.docs]:[doc],paths=exportPaths();const html=makeExport(docs,paths);download(new Blob([html],{type:'text/html;charset=utf-8'}),all&&docs.length>1?'Folio-collection.html':baseName(paths.get(doc.id)));notify(all&&docs.length>1?'Collection exportée avec ses onglets, ses formules, ses diagrammes et ses images locales.':'Page HTML exportée. Elle peut être ouverte hors connexion.');}
+  async function exportDocuments(all) {
+    const doc=activeDoc();if(!doc||state.busy)return;
+    const markdown=!all&&state.source,button=$(all?'export-collection':'export-toggle');
+    const restoreFocus=document.activeElement===button;
+    // Keep the collection and assets stable while yielding for UI feedback.
+    // Navigation is still available, but imports, removals and watcher commits wait.
+    setBusyUI(true);closeWatchMenu();
+    try {
+      await new Promise(resolve=>requestAnimationFrame(resolve));
+      if(markdown){download(new Blob([doc.content],{type:'text/markdown;charset=utf-8'}),baseName(doc.path));notify('Source Markdown téléchargée, sans les numéros de ligne.');}
+      else{const docs=all?[...state.docs]:[doc],paths=exportPaths(),html=makeExport(docs,paths);download(new Blob([html],{type:'text/html;charset=utf-8'}),all?'Folio-collection.html':baseName(paths.get(doc.id)));notify(all?'Collection HTML exportée avec ses documents, ses repères et ses images locales.':'Page HTML exportée telle qu’affichée, avec ses repères et ses images locales.');}
+    }
     catch(error){notify('L’export n’a pas abouti : '+(error.message||'erreur inattendue.'),true);}
-    finally{button.disabled=state.busy;if(focusFromMenu&&!button.disabled&&state.active)focusCollectionControl(button);}
+    finally{setBusyUI(false);flushPersistence();if(restoreFocus&&(document.activeElement===document.body||document.activeElement===button)){if(all)button.focus({preventScroll:true});else focusCollectionControl(button);}}
   }
   $('file-list').addEventListener('click',event=>{const remove=event.target.closest('.file-remove[data-remove-id]');if(remove){closeDoc(remove.dataset.removeId,{fromCollection:true});return;}const button=event.target.closest('.file-button[data-doc-id]');if(button)setActive(button.dataset.docId);});
   $('tab-list').addEventListener('click',event=>{const close=event.target.closest('[data-close-id]');if(close){closeDoc(close.dataset.closeId);return;}const tab=event.target.closest('[data-doc-id]');if(tab)setActive(tab.dataset.docId,{focus:true});});
@@ -727,6 +858,8 @@ Un prix n’est pas une formule : écrivez \$12 pour afficher un dollar littéra
     event.preventDefault();setActive(state.docs[target].id,{focus:true});
   });
   $('article').addEventListener('click',event=>{
+    const marker=event.target.closest('.folio-reference[data-number]');
+    if(marker){event.preventDefault();const doc=activeDoc();if(doc)void copyText(doc.path+', repère '+marker.dataset.number).then(copied=>{if(copied)notify('Référence copiée : '+doc.path+', repère '+marker.dataset.number+'.');});return;}
     const link=event.target.closest('a[href]');if(!link)return;const href=link.getAttribute('href');
     if(isExternal(href)||/^(?:mailto|tel):/i.test(href))return;
     event.preventDefault();const doc=activeDoc();if(!doc)return;const ref=splitReference(href);
@@ -746,13 +879,13 @@ Un prix n’est pas une formule : écrivez \$12 pour afficher un dollar littéra
   $('file-input').addEventListener('change',event=>importFiles([...event.target.files]));
   $('folder-input').addEventListener('change',event=>importFiles([...event.target.files]));
   $('search').addEventListener('input',updateFileList);
-  $('reader-scroll').addEventListener('scroll',()=>{if(!scrollFrame)scrollFrame=requestAnimationFrame(()=>{updateProgress();scrollFrame=0;});},{passive:true});
-  $('source-toggle').addEventListener('click',()=>{const doc=activeDoc();if(!doc)return;rememberScroll();state.source=!state.source;$('reader').classList.toggle('source-mode',state.source);$('article').hidden=state.source;$('source-view').hidden=!state.source;$('source-toggle').setAttribute('aria-pressed',String(state.source));$('source-toggle').title=state.source?'Afficher la page mise en forme':'Afficher le Markdown source';$('reader-scroll').scrollTop=doc[state.source?'sourceScroll':'scroll']||0;updateProgress();if(matchMedia('(max-width:760px)').matches){setSidebar(false);focusContent($(state.source?'source-view':'article'));}});
+  $('reader-scroll').addEventListener('scroll',()=>{if(!scrollFrame)scrollFrame=requestAnimationFrame(()=>{updateProgress();scrollFrame=0;if(rememberScroll(true))persistenceChanged(500);});},{passive:true});
+  $('source-toggle').addEventListener('click',()=>{const doc=activeDoc();if(!doc||state.busy)return;rememberScroll();state.source=!state.source;doc.sourceMode=state.source;renderSource(doc);updateViewUI();restoreScroll(doc);persistenceChanged(250);updateProgress();if(matchMedia('(max-width:760px)').matches){setSidebar(false);focusContent($(state.source?'source-view':'article'));}});
+  $('line-numbers-toggle').addEventListener('click',()=>{const doc=activeDoc();if(!doc||state.busy)return;rememberScroll();doc.lineNumbers=!doc.lineNumbers;renderSource(doc);const content=buildContent(doc,true);$('article').replaceChildren(...content.childNodes);updateViewUI();restoreScroll(doc);persistenceChanged();updateProgress();});
   $('print-doc').addEventListener('click',()=>{if(state.source)$('source-toggle').click();window.print();});
-  $('export-toggle').addEventListener('click',()=>{closeWatchMenu();const hidden=!$('export-menu').hidden;$('export-menu').hidden=hidden;$('export-toggle').setAttribute('aria-expanded',String(!hidden));if(!hidden)$('export-current').focus();});
-  $('export-current').addEventListener('click',()=>exportHTML(false));$('export-collection').addEventListener('click',()=>exportHTML(true));
-  document.addEventListener('click',event=>{if(!event.target.closest('.export-container'))closeExport();if(!event.target.closest('.watch-container'))closeWatchMenu();});
-  $('watch-menu-toggle').addEventListener('click',()=>{closeExport();const open=$('watch-menu').hidden;$('watch-menu').hidden=!open;$('watch-menu-toggle').setAttribute('aria-expanded',String(open));if(open){updateWatchUI();$('watch-toggle').focus();}});
+  $('export-toggle').addEventListener('click',()=>exportDocuments(false));$('export-collection').addEventListener('click',()=>exportDocuments(true));
+  document.addEventListener('click',event=>{if(!event.target.closest('.watch-container'))closeWatchMenu();});
+  $('watch-menu-toggle').addEventListener('click',()=>{const open=$('watch-menu').hidden;$('watch-menu').hidden=!open;$('watch-menu-toggle').setAttribute('aria-expanded',String(open));if(open){updateWatchUI();$('watch-toggle').focus();}});
   $('watch-toggle').addEventListener('change',()=>{
     const doc=activeDoc();if(!doc)return;
     if($('watch-toggle').checked){linkOriginal(doc);return;}
@@ -776,11 +909,13 @@ Un prix n’est pas une formule : écrivez \$12 pour afficher un dollar littéra
   $('help-open').addEventListener('click',()=>$('help-dialog').showModal());
   document.querySelectorAll('[data-close]').forEach(button=>button.addEventListener('click',()=>button.dataset.close==='paste-dialog'?closePasteDialog():$(button.dataset.close).close()));
   $('clear-all').addEventListener('click',()=>$('clear-dialog').showModal());
-  $('confirm-clear').addEventListener('click',()=>{if(state.busy)return;FolioWatcher.stopAll();state.docs=[];state.assets.clear();$('search').value='';$('clear-dialog').close();showEmpty();persistenceChanged();notify(local.requested?'La collection a été vidée. Vérifiez la confirmation de mémorisation dans la colonne de gauche.':'Les documents ont été retirés de cette session.');});
-  $('sidebar-toggle').addEventListener('click',()=>{const open=!$('sidebar').classList.contains('is-open');setSidebar(open,{focus:open,returnFocus:!open});});
+  $('confirm-clear').addEventListener('click',()=>{if(state.busy)return;clearUndo();FolioWatcher.stopAll();state.docs=[];state.assets.clear();$('search').value='';$('clear-dialog').close();showEmpty();persistenceChanged();notify(local.requested?'La collection a été vidée. Vérifiez la confirmation de mémorisation dans la colonne de gauche.':'Les documents ont été retirés de cette session.');});
+  $('sidebar-toggle').addEventListener('click',()=>{if(matchMedia('(max-width:760px)').matches){const open=!$('sidebar').classList.contains('is-open');setSidebar(open,{focus:open,returnFocus:!open});}else{state.collectionCollapsed=!state.collectionCollapsed;updatePanelUI();updateProgress();}});
+  $('outline-toggle').addEventListener('click',()=>{if(!state.active)return;state.outlineCollapsed=!state.outlineCollapsed;updatePanelUI();syncDocumentPanels();updateProgress();});
   $('sidebar-close').addEventListener('click',()=>setSidebar(false,{returnFocus:true}));$('mobile-backdrop').addEventListener('click',()=>setSidebar(false,{returnFocus:true}));
-  $('toast-close').addEventListener('click',()=>$('toast').hidden=true);
-  document.addEventListener('keydown',event=>{if(document.querySelector('dialog[open]'))return;if((event.ctrlKey||event.metaKey)&&event.key.toLowerCase()==='k'){event.preventDefault();if(matchMedia('(max-width:760px)').matches)setSidebar(true);$('search').focus();$('search').select();}if(event.key==='Escape'){closeExport(true);closeWatchMenu(true);const sidebarOpen=$('sidebar').classList.contains('is-open');setSidebar(false,{returnFocus:sidebarOpen});$('drop-overlay').hidden=true;state.dragDepth=0;}});
+  $('undo-remove').addEventListener('click',undoRemoval);
+  $('toast-close').addEventListener('click',()=>{clearUndo();$('toast').hidden=true;});
+  document.addEventListener('keydown',event=>{if(document.querySelector('dialog[open]'))return;if((event.ctrlKey||event.metaKey)&&event.key.toLowerCase()==='k'){event.preventDefault();if(matchMedia('(max-width:760px)').matches)setSidebar(true);else{state.collectionCollapsed=false;updatePanelUI();}$('search').focus();$('search').select();}if(event.key==='Escape'){closeWatchMenu(true);const sidebarOpen=$('sidebar').classList.contains('is-open');setSidebar(false,{returnFocus:sidebarOpen});$('drop-overlay').hidden=true;state.dragDepth=0;}});
   if(!/Mac|iPhone|iPad/.test(navigator.platform))document.querySelector('.search-box kbd').textContent='Ctrl K';
   const hasFiles=event=>Array.from(event.dataTransfer?.types||[]).includes('Files');
   document.addEventListener('dragenter',event=>{if(!hasFiles(event))return;event.preventDefault();state.dragDepth++;$('drop-overlay').hidden=false;});
@@ -797,8 +932,11 @@ Un prix n’est pas une formule : écrivez \$12 pour afficher un dollar littéra
     if(files)await importFiles(files);
     flushPersistence();
   });
-  window.addEventListener('resize',()=>{syncDocumentPanels();updateProgress();const focused=document.activeElement,mobile=matchMedia('(max-width:760px)').matches;if(!mobile){setSidebar(false);if(focused===$('sidebar-toggle')||focused===$('sidebar-close'))$('file-list').querySelector('.file-button.active')?.focus({preventScroll:true});}else if(!$('sidebar').classList.contains('is-open')&&$('sidebar').contains(focused))$('sidebar-toggle').focus({preventScroll:true});});
-  window.addEventListener('beforeunload',event=>{if(local.running||local.dirty&&(local.requested||local.committed)||state.reloadRequested&&(state.docs.length||state.assets.size)){event.preventDefault();event.returnValue='';}state.reloadRequested=false;});
+  window.addEventListener('resize',()=>{syncDocumentPanels();updateProgress();const focused=document.activeElement,mobile=matchMedia('(max-width:760px)').matches;if(!mobile){setSidebar(false);if(focused===$('sidebar-close')||state.collectionCollapsed&&$('sidebar').contains(focused))focusCollectionControl($('file-list').querySelector('.file-button.active'));}else if(!$('sidebar').classList.contains('is-open')&&$('sidebar').contains(focused))$('sidebar-toggle').focus({preventScroll:true});if(matchMedia('(max-width:1050px)').matches&&(focused===$('outline-toggle')||$('reader-sidebar').contains(focused)))focusContent($(state.source?'source-view':'article'));updatePanelUI();});
+  function saveReadingPosition() {if(rememberScroll(true))persistenceChanged();flushPersistence();}
+  document.addEventListener('visibilitychange',()=>{if(document.visibilityState==='hidden')saveReadingPosition();});
+  window.addEventListener('pagehide',saveReadingPosition);
+  window.addEventListener('beforeunload',event=>{saveReadingPosition();if(local.running||local.dirty&&(local.requested||local.committed)||state.reloadRequested&&(state.docs.length||state.assets.size)){event.preventDefault();event.returnValue='';}state.reloadRequested=false;});
   showEmpty();
   initializePersistence();
 })();

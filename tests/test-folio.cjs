@@ -165,7 +165,7 @@ await check('Recherche : accents, caractères littéraux et aucune injection',()
 });
 let standaloneHTML='',collectionHTML='';
 await check('Export individuel : téléchargement capturé et HTML autonome reparsable',async()=>{
- ctx.doc.getElementById('export-current').click();await until(()=>ctx.downloads.length>=1,'individual export');
+  ctx.doc.getElementById('export-toggle').click();await until(()=>ctx.downloads.length>=1,'individual export');
  const output=ctx.downloads[0];assert.equal(output.filename,'index.html');standaloneHTML=await output.blob.text();fs.writeFileSync(path.join(outputDir,'export-individuel.html'),standaloneHTML);
  const out=createDOM(standaloneHTML,'file:///notes/index.html');await delay(25);
  assert.equal(out.errors.length,0,out.errors.join('\n'));assert.equal(out.doc.querySelectorAll('script').length,0);assert.equal(out.win.__folio_xss,undefined);assert.equal(out.doc.querySelectorAll('.katex').length,4);
